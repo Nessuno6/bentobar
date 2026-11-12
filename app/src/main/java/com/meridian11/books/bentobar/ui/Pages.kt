@@ -376,6 +376,12 @@ fun SetupPage(activity: Activity, setup: SetupState, onTurnOn: () -> Unit) {
             OnlineSwitch(Online.Service.FRANKFURTER, online, stringResource(R.string.setup_online_fx), stringResource(R.string.setup_online_fx_first))
             Text(stringResource(R.string.setup_online_off_note), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // This fork's own update check (net/Updates): no item's, so no item to set up first.
+            val updates = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.meridian11.books.bentobar.net.Updates.on(activity)) }
+            SwitchRow(stringResource(R.string.updates_check), updates.value, help = stringResource(R.string.updates_check_help)) { want ->
+                com.meridian11.books.bentobar.net.Updates.setOn(activity, want)
+                updates.value = want
+            }
         }
     }
 }

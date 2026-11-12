@@ -273,6 +273,9 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
   A service is asked only after its item was set up on this install: `data/Online.kt` records that
   outside the layout, so a pasted layout or a restored backup turns nothing on. Off (Setup › Online
   services) stops requests at once and deletes what was fetched (`ItemType.forgetFetched`).
+  The one exception, in this fork: `net/Updates.kt` asks `Host.GITHUB` for the fork's own latest release every
+  4 hours (a JobScheduler job), through `Http.get` like the items. The gate lets GitHub through only while that
+  check asks and while Setup's "Check for updates" is on; no item names it, and it sends nothing of the device.
   The one location permission is `ACCESS_COARSE_LOCATION`, for Weather's My location, asked for only when
   an item chooses it (the exported `MainActivity` asks it only for a layout with one: `HereRules.mayAsk`).
   Where the device is is kept only while such an item is outside Off and the switch is on

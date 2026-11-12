@@ -19,6 +19,8 @@ enum class Host(val domain: String) {
     FINNHUB("api.finnhub.io"),
     /** Reference exchange rates from the European Central Bank (Frankfurter). */
     FRANKFURTER("api.frankfurter.dev"),
+    /** This fork's own latest release (net/Updates), and nothing else: no item asks it. */
+    GITHUB("api.github.com"),
 }
 
 /**

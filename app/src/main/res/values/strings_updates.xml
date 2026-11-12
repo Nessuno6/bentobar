@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This fork's update check (net/Updates). -->
+<resources>
+    <string name="updates_check">Check for updates</string>
+    <string name="updates_check_help">Six times a day, asks GitHub for this BentoBar\'s latest release and tells you when there\'s a newer one. Nothing about your device or your items is sent.</string>
+    <string name="updates_channel">Updates</string>
+    <string name="updates_available">BentoBar %1$s is available</string>
+    <string name="updates_available_text">You have %1$s. Tap to download the update.</string>
+    <string name="updates_whats_new">What\'s new</string>
+</resources>

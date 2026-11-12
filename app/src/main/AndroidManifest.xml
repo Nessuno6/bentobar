@@ -300,6 +300,11 @@
             android:name=".widget.WidgetJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <!-- This fork's update check, every four hours (net/Updates). -->
+        <service
+            android:name=".net.UpdateJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- Read only; guarded by the permission above. -->
         <provider

@@ -18,7 +18,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Googlebook_OS-Android_17-133F43" alt="Googlebook OS, Android 17">
-  <img src="https://img.shields.io/badge/goes_online-only_for_five_items_you_set_up-2E7D32" alt="Goes online only for five items you set up">
+  <img src="https://img.shields.io/badge/goes_online-for_five_items_you_set_up_and_update_checks-2E7D32" alt="Goes online for five items you set up, and to check for updates">
   <img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT license">
   <img src="https://img.shields.io/badge/developed_on-a_Googlebook-1F6F66" alt="Developed on a Googlebook">
 </p>
@@ -30,6 +30,8 @@
 >   **Look › Other apps** switch. They can open an item's own menu where they show it (on a tap or when the pointer
 >   rests on it), close it again, and hide items, or the whole strip, from BentoBar's bar while they show them.
 >   External displays always keep their whole strip.
+> - **Update check:** six times a day it asks GitHub for this fork's latest release and notifies you of a newer
+>   one (see [Privacy](#privacy); Setup › Online services turns it off).
 > - **Widgets** for the home screen, and Device batteries widgets for **One UI's lock screen** (1 or 2 devices).
 > - **Links** to single items, a **charge speed** reading, extra readings on rooted devices, and **One UI icons**
 >   for items.
@@ -196,7 +198,12 @@ BentoBar doesn't read other apps' windows and doesn't watch your keyboard, mouse
   press Search.
   Finnhub sees your IP address and can tie requests to your key's account. BentoBar ships no key.
 
-Requests can go to those four services and nowhere else (the code has no way to name another
+**This fork also checks for updates:** six times a day (every 4 hours, when there's a network) it asks
+GitHub's API for this fork's latest release, and shows a notification when it's newer than yours. The
+request asks for that release only and carries nothing about your device or your items; GitHub sees
+your IP address, as any website does. **Setup › Online services › Check for updates** turns it off.
+
+Requests can go to those four services and GitHub and nowhere else (the code has no way to name another
 address), **Setup › Online services** switches each off, and a layout pasted from another install
 never turns them on. BentoBar sends nothing else anywhere: not your layout, your calendar, your
 clipboard, what's playing or anything it measures. It has no accounts of its own, no ads and no analytics, and it
@@ -239,7 +246,7 @@ show the whole system instead.
 | Approximate location *(optional)* | Weather's My location, rounded to about 10 km before it is sent |
 | Alarms and reminders *(optional)* | timers that ring on the second while the Googlebook sleeps |
 | Usage access *(optional)* | the apps using the most data today and the largest apps, in the Network and Storage menus |
-| Internet | Weather (Open-Meteo), Flight (AirLabs) and US stocks (Finnhub), only after you set them up; nothing else |
+| Internet | Weather (Open-Meteo), Flight (AirLabs) and US stocks (Finnhub), only after you set them up; this fork's update check (GitHub); nothing else |
 | Notification access *(optional)* | Now playing's title, artist and artwork; BentoBar receives no notifications |
 | Network state, launcher apps | the network menu, and picking apps for shortcuts |
 

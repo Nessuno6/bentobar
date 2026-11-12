@@ -144,7 +144,9 @@ class OnlineTest {
     }
 
     @Test fun eachHostBelongsToOneService() {
-        for (host in com.meridian11.books.bentobar.net.Host.entries) assertTrue(host in Online.serviceOf(host).hosts)
-        assertEquals(com.meridian11.books.bentobar.net.Host.entries.size, Online.Service.entries.sumOf { it.hosts.size })
+        // GitHub is no item's: only the fork's update check asks it (net/Updates).
+        val itemHosts = com.meridian11.books.bentobar.net.Host.entries - com.meridian11.books.bentobar.net.Host.GITHUB
+        for (host in itemHosts) assertTrue(host in Online.serviceOf(host).hosts)
+        assertEquals(itemHosts.size, Online.Service.entries.sumOf { it.hosts.size })
     }
 }

@@ -57,6 +57,8 @@ object Env {
         // Whether other apps may read Device batteries: this install's choice too, beside it.
         com.meridian11.books.bentobar.data.Sharing.init(app.noBackupFilesDir)
         wireOnline()
+        // This fork's update check, every four hours while it is on (net/Updates).
+        com.meridian11.books.bentobar.net.Updates.schedule(app)
         FlightItem.sweepAtStart()
         NowPlaying.init(app)
         // Before Timers: a timer that finished while BentoBar wasn't running ends in init, and its
@@ -74,7 +76,10 @@ object Env {
      * never from the main thread, and not at all without a network.
      */
     private fun wireOnline() {
-        Http.allowed = { host ->
+        Http.allowed = allowed@{ host ->
+            // GitHub: only this fork's own update check, while it asks and while it is switched on (net/Updates).
+            if (host == com.meridian11.books.bentobar.net.Host.GITHUB)
+                return@allowed com.meridian11.books.bentobar.net.Updates.asking && com.meridian11.books.bentobar.net.Updates.on(app)
             val service = Online.serviceOf(host)
             Online.on(service) && Ticker.running &&
                 Store.config.value.items.any { it.section != Section.OFF && Items.of(it.type)?.online == service }

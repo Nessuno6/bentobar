@@ -80,6 +80,7 @@ object Online {
 
     fun hasKey(service: Service): Boolean = service in current.value.keyed
 
+    /** The item service a host belongs to. Every host but [Host.GITHUB] (the fork's update check, net/Updates) has one. */
     fun serviceOf(host: Host): Service = Service.entries.first { host in it.hosts }
 
     /**
