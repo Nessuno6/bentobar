@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- From One UI SecSettingsIntelligence sec_ic_brief_buds4_stem_case: local build only, never committed. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:height="24dp" android:width="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FF000000" android:pathData="M22,15C22,16.795 20.545,18.25 18.75,18.25H5.25C3.455,18.25 2,16.795 2,15V11.689H22V15ZM11.969,14.027C11.542,14.027 11.196,14.372 11.196,14.799C11.196,15.225 11.542,15.571 11.969,15.571C12.395,15.571 12.741,15.225 12.741,14.799C12.741,14.373 12.395,14.027 11.969,14.027Z" android:fillType="evenOdd" />
+    <path android:fillColor="#FF000000" android:pathData="M18.75,5.75C20.545,5.75 22,7.205 22,9V10.189H20.496C20.458,8.769 19.299,7.63 17.87,7.63H6.13C4.701,7.63 3.542,8.769 3.504,10.189H2V9C2,7.205 3.455,5.75 5.25,5.75H18.75Z" />
+    <path android:fillColor="#FF000000" android:pathData="M17.87,8.63C18.746,8.63 19.459,9.322 19.496,10.189H4.504C4.541,9.322 5.254,8.63 6.13,8.63H17.87Z" />
+</vector>

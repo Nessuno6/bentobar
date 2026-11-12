@@ -4,9 +4,8 @@
 Turns One UI icons (SVG files, as exported from a One UI design kit) into Android vector drawables that BentoBar draws in
 place of its Material Symbols, icon by icon (util/OneUiIcons.kt maps a symbol to `oneui_<name>`).
 
-The icons are Samsung's designs: they are for a build of your own, and stay out of the repository. The drawables this
-writes are listed in .git/info/exclude (a local, uncommitted ignore list), and the app draws Material Symbols for any
-that are missing, so the repository builds and works without them.
+This fork ships the drawables: these icons are also in the One UI icon pack (MIT, see ONEUI-ICONS-LICENSE), which
+tools/oneui_icons_pack.py draws every other symbol from. The app draws Material Symbols for any symbol without one.
 
     python tools/oneui_icons.py PATH/TO/svg_folder
 

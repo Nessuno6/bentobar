@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One UI battery widget sec_ic_brief_widget_spen: local build only, never committed. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:height="19dp" android:width="19dp" android:viewportWidth="19" android:viewportHeight="19">
+    <path android:name="android:onPrimary" android:fillColor="#FF000000" android:pathData="M3.086,15.154L3.846,15.915L3.582,16.179C3.321,16.439 2.721,16.699 2.511,16.489C2.303,16.279 2.56,15.681 2.821,15.418L3.086,15.154ZM12.669,4.047L14.954,6.33L8.605,12.68C8.182,13.102 6.036,14.995 4.501,15.351L3.65,14.5C4.005,12.964 5.898,10.818 6.321,10.395L12.669,4.047ZM14.889,2.611L16.389,4.11C16.647,4.369 16.619,4.818 16.324,5.113C16.03,5.407 15.582,5.436 15.322,5.177L13.824,3.678C13.565,3.418 13.593,2.969 13.888,2.676C14.182,2.382 14.631,2.352 14.889,2.611Z" android:strokeWidth="1" android:fillType="evenOdd" />
+</vector>

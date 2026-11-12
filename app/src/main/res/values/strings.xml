@@ -505,8 +505,10 @@
     <string name="look_color">Color</string>
     <string name="look_color_auto">Match the status bar</string>
     <string name="look_color_opposite">Opposite</string>
-    <string name="look_oneui_icons">One UI icons</string>
-    <string name="look_oneui_icons_help">Draws the icons One UI has, like the mouse, headphones and charging bolt, in its own style.</string>
+    <string name="look_oneui_icons">Icons</string>
+    <string name="look_oneui_icons_help">Every icon, in the bar, its menus and here: Material 3 Expressive, or One UI\'s own style.</string>
+    <string name="look_icons_m3e">Material 3 Expressive</string>
+    <string name="look_icons_oneui">One UI</string>
     <string name="look_glass_tone">Popup glass</string>
     <string name="look_glass_tone_light">Light</string>
     <string name="look_glass_tone_dark">Dark</string>

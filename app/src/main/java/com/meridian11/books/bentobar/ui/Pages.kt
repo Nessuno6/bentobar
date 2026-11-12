@@ -198,10 +198,12 @@ fun LookPage() {
                 Store.update { it.copy(glassFollowsBar = on) }
             }
         }
-        // Only in a build with One UI's icons (tools/oneui_icons.py).
+        // Material Symbols (Material 3 Expressive) or One UI's icons (util/OneUiIcons), for every icon.
         if (com.meridian11.books.bentobar.util.OneUiIcons.available(androidx.compose.ui.platform.LocalContext.current))
-            SwitchRow(stringResource(R.string.look_oneui_icons), cfg.oneUiIcons, help = stringResource(R.string.look_oneui_icons_help)) { on ->
-                Store.update { it.copy(oneUiIcons = on) }
+            ChoiceRow(stringResource(R.string.look_oneui_icons),
+                listOf(false to stringResource(R.string.look_icons_m3e), true to stringResource(R.string.look_icons_oneui)),
+                cfg.oneUiIcons, help = stringResource(R.string.look_oneui_icons_help)) { v ->
+                Store.update { it.copy(oneUiIcons = v) }
             }
         ChoiceRow(stringResource(R.string.look_background), listOf(Pill.NONE to stringResource(R.string.look_pill_none),
             Pill.SUBTLE to stringResource(R.string.look_pill_subtle), Pill.SOLID to stringResource(R.string.look_pill_solid)), cfg.pill) { v ->
