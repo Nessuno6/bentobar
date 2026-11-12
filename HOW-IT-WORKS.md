@@ -1,7 +1,7 @@
 # How BentoBar works (this fork)
 
 The details behind [the README](README.md): what this fork adds and how it behaves, what root adds, the interfaces
-for other apps, and how to build it. For what BentoBar reads and sends, see [Privacy](README.md#privacy).
+for other apps, and how to build it. For what BentoBar reads and sends, see [Privacy in full](#privacy-in-full).
 
 ## What this fork adds
 
@@ -94,6 +94,133 @@ Six times a day BentoBar asks GitHub for this fork's latest release and notifies
 of a newer one. Tap it: the first time, Android asks you to let BentoBar install apps; then BentoBar downloads the APK
 and Android's installer does the rest. **Setup › Online services** has **Check for updates** (off stops the checks)
 and **Check now**. See [Privacy](README.md#privacy) for exactly what is asked.
+
+## Privacy in full
+
+Why BentoBar has an accessibility service, and everything it reads and sends.
+
+Android lets an app draw on top of the status bar only through an accessibility service, so
+Android warns that BentoBar can "view and control your screen". Here is everything BentoBar does
+with that access:
+
+- It listens only for **windows appearing, going or moving**, not their content, so it can hide
+  for full-screen apps and shades.
+- It reads the **status bar's layout, and no other window**, to find free space.
+- It copies the **colour of the status bar clock**, from a picture of the status bar's own window
+  (not your screen), so your items match.
+- It runs **system actions** (screenshot, lock, overview, all apps, notifications, Quick Settings,
+  power) when you pick them in the Tools menu or click a Shortcut item.
+
+BentoBar doesn't read other apps' windows and doesn't watch your keyboard, mouse or touches.
+
+**BentoBar goes online for five items, only after you set them up** on this device, and for this fork's update
+check (below):
+
+- **Weather** sends [Open-Meteo](https://open-meteo.com) the city you search for, and for the forecast
+  the coordinates of the city you pick, rounded to about a kilometre: about every 30 minutes while the
+  bar is on screen, and when you open its menu or press Refresh. Open-Meteo sees your IP address, as
+  any website does. With **My location** instead of a city, BentoBar asks Android for the device's
+  approximate location (never the precise one) while that item is in the bar or waits in Hidden to show for
+  rain or snow, or while BentoBar's settings window is open: every 30 minutes once it knows, and when
+  Android doesn't, again after 1, 2, 5 and 15 minutes, then every 30. It sends
+  Open-Meteo that location rounded to about 10 km. BentoBar asks only for Android's "while using the
+  app" permission, not for background location. Where you are, and its forecast, are kept
+  in memory only: never on the device, in your layout or in its backup.
+- **Air quality & UV** sends Open-Meteo what Weather does (the city you search for, then the city's
+  coordinates or, with My location, where the device is, rounded in the same way): about every 30
+  minutes while the bar is on screen, and when you open its menu or press Refresh. Its readings are
+  kept in memory only. Weather's switch in Setup › Online services covers it too.
+- **Exchange rates** asks [Frankfurter](https://frankfurter.dev) for the European Central Bank's
+  reference table of currencies, at most once an hour while the bar is on screen, and when you open
+  its menu or press Refresh. No key is needed, and the pairs you follow and the converter's amounts are
+  worked out on the device. Frankfurter sees your IP address, as any website does.
+- **Flight** sends [AirLabs](https://airlabs.co) the flight number and your own AirLabs key: when you
+  track a flight, when you press Refresh, and while it follows the flight (about every 3 hours, then
+  every 30 minutes or sooner from 3 hours before departure until it lands). AirLabs sees your IP
+  address and can tie lookups to your key's account. BentoBar ships no key.
+- **US stocks** sends [Finnhub](https://finnhub.io) your own Finnhub key with the symbol of each stock you
+  follow: every 2 minutes while the US market is open and the bar is on screen, once after the close,
+  and when you open its menu, press Refresh or save a new key. Its search sends what you type when you
+  press Search.
+  Finnhub sees your IP address and can tie requests to your key's account. BentoBar ships no key.
+
+**This fork also checks for updates:** six times a day (every 4 hours, when there's a network) it asks
+GitHub's API for this fork's latest release, and shows a notification when it's newer than yours. The
+request asks for that release only and carries nothing about your device or your items; GitHub sees
+your IP address, as any website does. **Setup › Online services › Check for updates** turns it off, and
+**Check now** beside it asks right away.
+Tapping the notification updates BentoBar from inside it: the first time, Android asks you to let BentoBar
+install apps; then it downloads the release's APK from GitHub and Android's installer asks you to confirm.
+
+Requests can go to those four services and GitHub and nowhere else (the code has no way to name another
+address), **Setup › Online services** switches each off, and a layout pasted from another install
+never turns them on. BentoBar sends nothing else anywhere, except to your own other device when you link
+them (below): not your layout, your calendar, your clipboard, what's playing or anything it measures. It has no
+accounts of its own, no ads and no analytics, and it sends its developer nothing.
+
+**Linking another device is off until you do it.** When you link your phone and tablet
+([how](#another-devices-batteries-cross-device-sdk)), each sends the other its own battery and the batteries and names
+of the devices it sees (a watch, earbuds, a mouse), every 30 seconds while linked. Google Play services carries them,
+encrypted, between your two devices, which must be signed in to the same Google account; BentoBar has no server and
+keeps none of it. **Unlink** in Device batteries' menu ends it.
+
+**Clipboard** reads the text you copy while the item is in use, and keeps your last few copies in
+memory only: they are gone when BentoBar stops, and are never stored or sent. The snippets you pin are
+saved with the item, in your layout. With *Paste into active field on click* on, the accessibility
+service pastes the snippet you click into the text field you are typing in, without reading that field
+or its app.
+
+**Now playing** reads the title, artist and artwork your media players publish, which Android shares
+only with apps that have notification access. That access is optional, and BentoBar tells Android to
+send it no notifications: it receives none. Without it the item still shows that something plays and
+controls it. Nothing about what you play is stored or sent.
+
+**Sharing device batteries with other apps is off by default.** If you turn on *Share with other
+apps* in Device batteries' settings, an app can read the kind, name and battery level of the devices
+BentoBar sees, and the earbuds' cases as last seen, but only after you grant it Android's permission
+*read device batteries from BentoBar*, app by app. BentoBar sends nothing anywhere for this: the app
+asks BentoBar on this device. Turning the switch off stops every app at once; Android's app settings
+take the permission back from one.
+
+If you use Android's backup, Android keeps a copy of BentoBar's settings in your Google account. Your
+AirLabs and Finnhub keys, the online switches and the sharing switches are left out of it.
+
+**Usage access is optional and off by default.** If you turn it on (Setup, or the Network and
+Storage menus), BentoBar reads how much data and storage each app uses, to list the top five in
+those menus, and nothing else. Android's switch also covers which apps you use and when; BentoBar
+doesn't read that. Turn it off any time in Android's Usage access settings (Setup › Usage access ›
+Open setting takes you there).
+Android doesn't share other apps' CPU or memory use with apps at all, so without root the CPU and Memory menus
+show the whole system instead.
+
+**Root is optional.** On a rooted device, and only if you allow BentoBar when your root manager asks, BentoBar reads
+what's listed under [Root](#root): temperatures, the apps using the CPU and memory, the battery's real cycles and
+health, and a Galaxy watch's or earbuds' levels. It reads only while the menu that shows it is open, changes nothing,
+and keeps and sends none of it.
+
+**Sharing the bar's items with other apps is off by default.** If you turn on **Look › Other apps**, an app can read
+what the bar shows (each item's icon and words, which can be a track's title or a meeting's name), open an item's
+menu and hide items from the bar while it shows them, but only after you grant it Android's permission *read the
+bar's items from BentoBar*, app by app. Nothing is sent anywhere: the app asks BentoBar on this device. Turning the
+switch off stops every app at once.
+
+| Permission | Used for |
+|---|---|
+| Accessibility service | drawing items on the status bar and running Tools actions |
+| Notifications *(optional)* | timer alerts, and the Live Update chip |
+| Calendar *(optional)* | Next meeting, and events in the month view |
+| Approximate location *(optional)* | Weather's My location, rounded to about 10 km before it is sent |
+| Alarms and reminders *(optional)* | timers that ring on the second while the device sleeps |
+| Usage access *(optional)* | the apps using the most data today and the largest apps, in the Network and Storage menus |
+| Internet | Weather and Air quality (Open-Meteo), Exchange rates (Frankfurter), Flight (AirLabs) and US stocks (Finnhub), only after you set them up; this fork's update check (GitHub); nothing else |
+| Install apps *(asked when you first update from inside BentoBar)* | installing this fork's own update, which Android asks you to confirm |
+| Notification access *(optional)* | Now playing's title, artist and artwork; BentoBar receives no notifications |
+| Root *(optional, asked by your root manager)* | the readings under [Root](#root); nothing is changed |
+| Network state, launcher apps | the network menu, and picking apps for shortcuts |
+
+BentoBar also defines two permissions for other apps, *read device batteries from BentoBar* and *read the bar's
+items from BentoBar*: see [Device batteries in your app](#device-batteries-in-your-app) and
+[The bar's items in your app](#the-bars-items-in-your-app).
 
 ## Root
 
