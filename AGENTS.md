@@ -274,8 +274,9 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
   outside the layout, so a pasted layout or a restored backup turns nothing on. Off (Setup › Online
   services) stops requests at once and deletes what was fetched (`ItemType.forgetFetched`).
   The one exception, in this fork: `net/Updates.kt` asks `Host.GITHUB` for the fork's own latest release every
-  4 hours (a JobScheduler job), through `Http.get` like the items. The gate lets GitHub through only while that
-  check asks and while Setup's "Check for updates" is on; no item names it, and it sends nothing of the device.
+  4 hours (a JobScheduler job, only while Setup's "Check for updates" is on), and when the user taps Check now,
+  through `Http.get` like the items. The gate lets GitHub through only while such a check or an update the user
+  started runs (`Updates.asking`); no item names it, and it sends nothing of the device.
   Updating from inside the app (`ui/UpdateActivity`, with `REQUEST_INSTALL_PACKAGES`) downloads the APK with
   `Http.download`: `Host.GITHUB_RELEASES` only, following one redirect only, to `Host.GITHUB_ASSETS` over HTTPS.
   The one location permission is `ACCESS_COARSE_LOCATION`, for Weather's My location, asked for only when

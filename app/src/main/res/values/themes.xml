@@ -16,6 +16,16 @@
         <item name="android:backgroundDimEnabled">false</item>
     </style>
 
+    <!-- The fork's update screen (ui/UpdateActivity): only the device's own dialog, in the device's theme (One UI's on Samsung). -->
+    <style name="Theme.BentoBar.Update" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
     <!--
       A popup's window (bar/MenuWindow.kt): see-through (the platform blurs only behind a translucent window), floating,
       with no dim, frame, elevation, minimum width or window animation of its own: the popup draws and moves itself.

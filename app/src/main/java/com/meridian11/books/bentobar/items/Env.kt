@@ -77,10 +77,11 @@ object Env {
      */
     private fun wireOnline() {
         Http.allowed = allowed@{ host ->
-            // GitHub: only this fork's own update check and its download, while one runs and while it is switched on (net/Updates).
+            // GitHub: only this fork's own update check and its download, while one runs (net/Updates): the scheduled
+            // check while it is switched on, Setup's Check now and an update the user started when they ask.
             if (host == com.meridian11.books.bentobar.net.Host.GITHUB || host == com.meridian11.books.bentobar.net.Host.GITHUB_RELEASES ||
                 host == com.meridian11.books.bentobar.net.Host.GITHUB_ASSETS)
-                return@allowed com.meridian11.books.bentobar.net.Updates.asking && com.meridian11.books.bentobar.net.Updates.on(app)
+                return@allowed com.meridian11.books.bentobar.net.Updates.asking
             val service = Online.serviceOf(host)
             Online.on(service) && Ticker.running &&
                 Store.config.value.items.any { it.section != Section.OFF && Items.of(it.type)?.online == service }

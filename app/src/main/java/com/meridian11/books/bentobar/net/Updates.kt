@@ -93,9 +93,16 @@ object Updates {
         return false
     }
 
-    /** Asks GitHub (background thread only). The newer release, if there is one; [notify]: tell once per version. */
-    fun check(ctx: Context, notify: Boolean): Release? {
-        if (!on(ctx)) return null
+    /** Whether the last check got no answer from GitHub (for Setup's Check now). */
+    @Volatile var lastFailed = false
+        private set
+
+    /**
+     * Asks GitHub (background thread only). The newer release, if there is one; [notify]: tell once per version.
+     * [manual]: Setup's Check now, which asks even with the scheduled check switched off.
+     */
+    fun check(ctx: Context, notify: Boolean, manual: Boolean = false): Release? {
+        if (!manual && !on(ctx)) return null
         asking = true
         val reply = try {
             Http.get(Request(Host.GITHUB, "/repos/$REPO/releases/latest"))
@@ -104,7 +111,9 @@ object Updates {
         }
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         p.edit().putLong("last", System.currentTimeMillis()).apply()
-        val latest = (reply as? Reply.Ok)?.let { parse(it.text) } ?: return null
+        val latest = (reply as? Reply.Ok)?.let { parse(it.text) }
+        lastFailed = latest == null
+        if (latest == null) return null
         val newer = latest.takeIf { newer(it.version, installed(ctx)) } ?: return null
         if (notify && p.getString("announced", null) != newer.version) {
             announce(ctx, newer)

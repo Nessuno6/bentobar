@@ -201,7 +201,8 @@ BentoBar doesn't read other apps' windows and doesn't watch your keyboard, mouse
 **This fork also checks for updates:** six times a day (every 4 hours, when there's a network) it asks
 GitHub's API for this fork's latest release, and shows a notification when it's newer than yours. The
 request asks for that release only and carries nothing about your device or your items; GitHub sees
-your IP address, as any website does. **Setup › Online services › Check for updates** turns it off.
+your IP address, as any website does. **Setup › Online services › Check for updates** turns it off, and
+**Check now** beside it asks right away.
 Tapping the notification updates BentoBar from inside it: the first time, Android asks you to let BentoBar
 install apps; then it downloads the release's APK from GitHub and Android's installer asks you to confirm.
 

@@ -11,7 +11,11 @@
     <string name="updates_permission">To update from inside BentoBar, Android needs you to allow it to install apps. Turn on \"Allow from this source\", then come back.</string>
     <string name="updates_allow">Allow</string>
     <string name="updates_downloading">Downloading…</string>
-    <string name="updates_installing">Installing. Android will ask you to confirm.</string>
+    <string name="updates_installing">Installing…</string>
+    <string name="updates_check_now">Check now</string>
+    <string name="updates_checking">Checking…</string>
+    <string name="updates_up_to_date">BentoBar %1$s is up to date</string>
+    <string name="updates_check_failed">Couldn\'t reach GitHub. Check your connection and try again.</string>
     <string name="updates_try_again">Try again</string>
     <string name="updates_done">BentoBar is updated</string>
     <string name="updates_no_apk">This release has no APK to download.</string>

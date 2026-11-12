@@ -308,7 +308,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+            android:theme="@style/Theme.BentoBar.Update" />
         <!-- This fork's update check, every four hours (net/Updates). -->
         <service
             android:name=".net.UpdateJob"

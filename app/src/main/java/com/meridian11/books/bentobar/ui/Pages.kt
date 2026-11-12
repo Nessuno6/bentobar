@@ -382,6 +382,30 @@ fun SetupPage(activity: Activity, setup: SetupState, onTurnOn: () -> Unit) {
                 com.meridian11.books.bentobar.net.Updates.setOn(activity, want)
                 updates.value = want
             }
+            // Check now: asks at once, scheduled check on or off; a newer release opens the update screen.
+            val status = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+            val checking = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            val upToDate = stringResource(R.string.updates_up_to_date, com.meridian11.books.bentobar.net.Updates.installed(activity))
+            val failed = stringResource(R.string.updates_check_failed)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(enabled = !checking.value, onClick = {
+                    checking.value = true
+                    status.value = null
+                    Thread({
+                        val newer = com.meridian11.books.bentobar.net.Updates.check(activity, notify = false, manual = true)
+                        val gotNoAnswer = com.meridian11.books.bentobar.net.Updates.lastFailed
+                        activity.runOnUiThread {
+                            checking.value = false
+                            when {
+                                newer != null -> activity.startActivity(UpdateActivity.intent(activity, newer))
+                                gotNoAnswer -> status.value = failed
+                                else -> status.value = upToDate
+                            }
+                        }
+                    }, "BentoBar update check").start()
+                }) { Text(stringResource(if (checking.value) R.string.updates_checking else R.string.updates_check_now)) }
+                status.value?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
         }
     }
 }
