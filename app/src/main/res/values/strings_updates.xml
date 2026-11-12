@@ -5,6 +5,17 @@
     <string name="updates_check_help">Six times a day, asks GitHub for this BentoBar\'s latest release and tells you when there\'s a newer one. Nothing about your device or your items is sent.</string>
     <string name="updates_channel">Updates</string>
     <string name="updates_available">BentoBar %1$s is available</string>
-    <string name="updates_available_text">You have %1$s. Tap to download the update.</string>
+    <string name="updates_available_text">You have %1$s. Tap to update.</string>
+    <string name="updates_update_to">Update to %1$s</string>
+    <string name="updates_preparing">Preparing…</string>
+    <string name="updates_permission">To update from inside BentoBar, Android needs you to allow it to install apps. Turn on \"Allow from this source\", then come back.</string>
+    <string name="updates_allow">Allow</string>
+    <string name="updates_downloading">Downloading…</string>
+    <string name="updates_installing">Installing. Android will ask you to confirm.</string>
+    <string name="updates_try_again">Try again</string>
+    <string name="updates_no_apk">This release has no APK to download.</string>
+    <string name="updates_download_failed">The download didn\'t finish. Check your connection and try again.</string>
+    <string name="updates_install_failed">The installation didn\'t go through.</string>
+    <string name="updates_other_key">This update is signed differently from the installed BentoBar, so Android won\'t install it over it.</string>
     <string name="updates_whats_new">What\'s new</string>
 </resources>

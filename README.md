@@ -30,8 +30,8 @@
 >   **Look › Other apps** switch. They can open an item's own menu where they show it (on a tap or when the pointer
 >   rests on it), close it again, and hide items, or the whole strip, from BentoBar's bar while they show them.
 >   External displays always keep their whole strip.
-> - **Update check:** six times a day it asks GitHub for this fork's latest release and notifies you of a newer
->   one (see [Privacy](#privacy); Setup › Online services turns it off).
+> - **Updates:** six times a day it asks GitHub for this fork's latest release and notifies you of a newer one,
+>   which it can then download and install itself (see [Privacy](#privacy); Setup › Online services turns it off).
 > - **Widgets** for the home screen, and Device batteries widgets for **One UI's lock screen** (1 or 2 devices).
 > - **Links** to single items, a **charge speed** reading, extra readings on rooted devices, and **One UI icons**
 >   for items.
@@ -202,6 +202,8 @@ BentoBar doesn't read other apps' windows and doesn't watch your keyboard, mouse
 GitHub's API for this fork's latest release, and shows a notification when it's newer than yours. The
 request asks for that release only and carries nothing about your device or your items; GitHub sees
 your IP address, as any website does. **Setup › Online services › Check for updates** turns it off.
+Tapping the notification updates BentoBar from inside it: the first time, Android asks you to let BentoBar
+install apps; then it downloads the release's APK from GitHub and Android's installer asks you to confirm.
 
 Requests can go to those four services and GitHub and nowhere else (the code has no way to name another
 address), **Setup › Online services** switches each off, and a layout pasted from another install
@@ -247,6 +249,7 @@ show the whole system instead.
 | Alarms and reminders *(optional)* | timers that ring on the second while the Googlebook sleeps |
 | Usage access *(optional)* | the apps using the most data today and the largest apps, in the Network and Storage menus |
 | Internet | Weather (Open-Meteo), Flight (AirLabs) and US stocks (Finnhub), only after you set them up; this fork's update check (GitHub); nothing else |
+| Install apps *(asked when you first update from inside BentoBar)* | installing this fork's own update, which Android asks you to confirm |
 | Notification access *(optional)* | Now playing's title, artist and artwork; BentoBar receives no notifications |
 | Network state, launcher apps | the network menu, and picking apps for shortcuts |
 

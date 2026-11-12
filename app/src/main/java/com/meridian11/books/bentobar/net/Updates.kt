@@ -35,11 +35,23 @@ object Updates {
     private const val NOTIFICATION_ID = 0x5570
     private const val PREFS = "updates"
 
-    data class Release(val version: String, val page: String, val apk: String?)
+    /** [apkPath]: the APK's path on [Host.GITHUB_RELEASES] ("/<owner>/<repo>/releases/download/<tag>/<name>.apk"). */
+    data class Release(val version: String, val page: String, val apkPath: String?)
 
-    /** True only while [check] asks: the gate's condition for [Host.GITHUB]. */
+    /** True only while [check] asks or [download] fetches: the gate's condition for GitHub's hosts. */
     @Volatile var asking = false
         private set
+
+    /** The release's APK into [into] (background thread only), through the gate like every request. */
+    fun download(release: Release, into: java.io.File, progress: (Long, Long) -> Unit): Boolean {
+        val path = release.apkPath ?: return false
+        asking = true
+        return try {
+            Http.download(Request(Host.GITHUB_RELEASES, path), into, progress) is Reply.Ok
+        } finally {
+            asking = false
+        }
+    }
 
     fun on(ctx: Context): Boolean = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("on", true)
 
@@ -106,7 +118,9 @@ object Updates {
         fun JsonObject.s(k: String) = this[k]?.jsonPrimitive?.contentOrNull
         val tag = o.s("tag_name") ?: return@runCatching null
         val apk = o["assets"]?.jsonArray?.map { it.jsonObject }?.firstOrNull { (it.s("name") ?: "").endsWith(".apk") }?.s("browser_download_url")
-        Release(tag.removePrefix("v"), o.s("html_url") ?: "https://github.com/$REPO/releases/latest", apk)
+        // Only an address on github.com, kept as its path: the download names the host itself.
+        val path = apk?.removePrefix("https://${Host.GITHUB_RELEASES.domain}")?.takeIf { it != apk && it.startsWith("/") }
+        Release(tag.removePrefix("v"), o.s("html_url") ?: "https://github.com/$REPO/releases/latest", path)
     }.getOrNull()
 
     private fun announce(ctx: Context, r: Release) {
@@ -116,11 +130,15 @@ object Updates {
         }
         fun open(code: Int, uri: String) = PendingIntent.getActivity(ctx, code, Intent(Intent.ACTION_VIEW, Uri.parse(uri)),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        // Tapped: updated from inside BentoBar (ui/UpdateActivity), or the release page when it has no APK.
+        val update = if (r.apkPath != null) PendingIntent.getActivity(ctx, 1,
+            com.meridian11.books.bentobar.ui.UpdateActivity.intent(ctx, r),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT) else open(1, r.page)
         val n = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(com.meridian11.books.bentobar.items.Glyphs.icon(com.meridian11.books.bentobar.util.Sym.UPDATE))
             .setContentTitle(ctx.getString(R.string.updates_available, r.version))
             .setContentText(ctx.getString(R.string.updates_available_text, installed(ctx)))
-            .setContentIntent(open(1, r.apk ?: r.page))
+            .setContentIntent(update)
             .setAutoCancel(true)
             .addAction(Notification.Action.Builder(null, ctx.getString(R.string.updates_whats_new), open(2, r.page)).build())
             .build()

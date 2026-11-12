@@ -59,6 +59,59 @@ class HttpTransport(
     }
 
     /**
+     * A file (the fork's update APK) into [into]. GitHub answers the release address with one redirect to its storage:
+     * followed only if it leads over HTTPS to [Host.GITHUB_ASSETS], and only once; anything else is a [Why.STATUS].
+     * At most [MAX_FILE_BYTES]; [progress] gets bytes so far and the total (-1 when unknown).
+     */
+    fun download(request: Request, into: java.io.File, progress: (Long, Long) -> Unit): Reply {
+        val address = address(request) ?: return Reply.Failed(Why.UNREADABLE)
+        var connection: HttpURLConnection? = null
+        return try {
+            var c = connectFile(address).also { connection = it }
+            var status = c.responseCode
+            if (status in 300..399) {
+                val next = c.getHeaderField("Location")?.let { runCatching { URL(it) }.getOrNull() }
+                    ?.takeIf { it.protocol == "https" && it.host == Host.GITHUB_ASSETS.domain }
+                    ?: return Reply.Failed(Why.STATUS, status)
+                c.disconnect()
+                c = connectFile(next.toString()).also { connection = it }
+                status = c.responseCode
+            }
+            if (status !in 200..299) return Reply.Failed(Why.STATUS, status)
+            val total = c.contentLengthLong
+            if (total > MAX_FILE_BYTES) return Reply.Failed(Why.TOO_LARGE, status)
+            var done = 0L
+            c.inputStream.use { input ->
+                into.outputStream().use { out ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        done += n
+                        if (done > MAX_FILE_BYTES) return Reply.Failed(Why.TOO_LARGE, status)
+                        out.write(buffer, 0, n)
+                        progress(done, total)
+                    }
+                }
+            }
+            if (total > 0 && done != total) Reply.Failed(Why.UNREADABLE) else Reply.Ok("")
+        } catch (t: Throwable) {
+            Reply.Failed(why(t))
+        } finally {
+            try { connection?.disconnect() } catch (_: Throwable) {}
+        }
+    }
+
+    private fun connectFile(address: String): HttpURLConnection = open(address).apply {
+        connectTimeout = connectMs
+        readTimeout = 30_000
+        instanceFollowRedirects = false
+        useCaches = false
+        requestMethod = "GET"
+        setRequestProperty("User-Agent", Http.USER_AGENT)
+    }
+
+    /**
      * At most [maxBytes], or null if there is more: a reply that large is nobody's forecast. Each
      * read has its own time limit, and so has the whole: past [deadline] (System.nanoTime) an answer
      * that still trickles in is given up as a timeout.
@@ -79,6 +132,8 @@ class HttpTransport(
         c.getHeaderField("Retry-After")?.trim()?.toLongOrNull()?.takeIf { it in 0..86_400 }
 
     companion object {
+        /** The largest update APK BentoBar downloads. */
+        const val MAX_FILE_BYTES = 100L * 1024 * 1024
         private val PATH = Regex("(/[A-Za-z0-9._~-]+)+")
 
         /**

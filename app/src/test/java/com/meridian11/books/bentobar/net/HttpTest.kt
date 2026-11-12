@@ -33,8 +33,9 @@ class HttpTest {
     }
 
     @Test fun fourHostsAndNoOther() {
-        // The items' services, and GitHub for this fork's own update check (net/Updates).
-        assertEquals(setOf("api.open-meteo.com", "air-quality-api.open-meteo.com", "geocoding-api.open-meteo.com", "airlabs.co", "api.finnhub.io", "api.frankfurter.dev", "api.github.com"), Host.entries.map { it.domain }.toSet())
+        // The items' services, and GitHub for this fork's own update check and its download (net/Updates).
+        assertEquals(setOf("api.open-meteo.com", "air-quality-api.open-meteo.com", "geocoding-api.open-meteo.com", "airlabs.co", "api.finnhub.io", "api.frankfurter.dev",
+            "api.github.com", "github.com", "release-assets.githubusercontent.com"), Host.entries.map { it.domain }.toSet())
     }
 
     @Test fun everyAddressIsHttpsToOneOfThem() {

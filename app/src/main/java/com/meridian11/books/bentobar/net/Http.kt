@@ -21,6 +21,10 @@ enum class Host(val domain: String) {
     FRANKFURTER("api.frankfurter.dev"),
     /** This fork's own latest release (net/Updates), and nothing else: no item asks it. */
     GITHUB("api.github.com"),
+    /** This fork's release APK, when the user updates from inside BentoBar (net/Updates)… */
+    GITHUB_RELEASES("github.com"),
+    /** …which GitHub sends from its storage, after one redirect (the only redirect BentoBar follows). */
+    GITHUB_ASSETS("release-assets.githubusercontent.com"),
 }
 
 /**
@@ -113,6 +117,29 @@ object Http {
         log("GET $request -> $reply")
         return reply
     }
+
+    /**
+     * A file into [into], through the same gate as [get]: the fork's update APK only ([Host.GITHUB_RELEASES], with
+     * the one redirect to [Host.GITHUB_ASSETS] that GitHub answers with). [progress]: bytes so far and the total
+     * (or -1). [Reply.Ok] with empty text once the whole file is there.
+     */
+    fun download(request: Request, into: java.io.File, progress: (Long, Long) -> Unit = { _, _ -> }): Reply {
+        if (onMain()) return refused(request, "the main thread")
+        if (request.host != Host.GITHUB_RELEASES || !allowed(request.host)) return Reply.Failed(Why.OFF)
+        if (!connected()) return Reply.Failed(Why.OFFLINE)
+        counts.incrementAndGet(request.host.ordinal)
+        val reply = try {
+            downloader(request, into, progress)
+        } catch (t: Throwable) {
+            Reply.Failed(Why.UNREADABLE)
+        }
+        log("GET $request (file) -> $reply")
+        return reply
+    }
+
+    /** What carries a download: [HttpTransport.download] in the app. */
+    @Volatile var downloader: (Request, java.io.File, (Long, Long) -> Unit) -> Reply =
+        { r, f, p -> HttpTransport().download(r, f, p) }
 
     private fun refused(request: Request, why: String): Reply {
         log("GET $request refused: $why")

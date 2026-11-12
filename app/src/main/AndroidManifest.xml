@@ -26,6 +26,8 @@
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+    <!-- This fork's in-app update (ui/UpdateActivity): Android asks the user to allow it the first time they update this way. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- The app picker for app shortcuts and folders lists launchable apps only. -->
     <queries>
@@ -300,6 +302,13 @@
             android:name=".widget.WidgetJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <!-- This fork's in-app update: install permission, download, then Android's installer. -->
+        <activity
+            android:name=".ui.UpdateActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- This fork's update check, every four hours (net/Updates). -->
         <service
             android:name=".net.UpdateJob"

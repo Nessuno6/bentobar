@@ -45,6 +45,8 @@ class ManifestTest {
             "android.permission.SCHEDULE_EXACT_ALARM",
             "android.permission.QUERY_ADVANCED_PROTECTION_MODE",
             "android.permission.PACKAGE_USAGE_STATS",
+            // This fork's in-app update, allowed by the user when they first update from inside BentoBar.
+            "android.permission.REQUEST_INSTALL_PACKAGES",
         ), manifest.all("uses-permission").map { it.attr("name") }.toSet())
     }
 
