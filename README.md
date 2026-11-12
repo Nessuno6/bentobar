@@ -5,8 +5,8 @@
 <h1 align="center">BentoBar</h1>
 
 <p align="center">
-  <b>Add, hide and organise items in your Googlebook's status bar.</b><br>
-  Your own items next to the system's icons, as an ordinary Android app: no root, no adb.
+  <b>Add, hide and organise items in your status bar: on a Googlebook, and on Samsung tablets and phones with One UI.</b><br>
+  Your own items next to the system's icons, as an ordinary Android app: no root, no adb. With root, it reads more.
 </p>
 
 <p align="center">
@@ -18,26 +18,70 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Googlebook_OS-Android_17-133F43" alt="Googlebook OS, Android 17">
+  <img src="https://img.shields.io/badge/One_UI-9-1259E6" alt="One UI 9">
+  <img src="https://img.shields.io/badge/root-optional-6A4C93" alt="Root optional">
   <img src="https://img.shields.io/badge/goes_online-for_five_items_you_set_up_and_update_checks-2E7D32" alt="Goes online for five items you set up, and to check for updates">
   <img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT license">
   <img src="https://img.shields.io/badge/developed_on-a_Googlebook-1F6F66" alt="Developed on a Googlebook">
 </p>
 
-> **This is a fork** of [Meridian11Labs/bentobar](https://github.com/Meridian11Labs/bentobar) with these additions,
-> on the `notch-items` branch:
->
-> - **Item sharing:** other apps can show BentoBar's items themselves, with your permission and the
->   **Look › Other apps** switch. They can open an item's own menu where they show it (on a tap or when the pointer
->   rests on it), close it again, and hide items, or the whole strip, from BentoBar's bar while they show them.
->   External displays always keep their whole strip.
-> - **Updates:** six times a day it asks GitHub for this fork's latest release and notifies you of a newer one,
->   which it can then download and install itself (see [Privacy](#privacy); Setup › Online services turns it off).
-> - **Widgets** for the home screen, and Device batteries widgets for **One UI's lock screen** (1 or 2 devices).
-> - **Links** to single items, a **charge speed** reading, extra readings on rooted devices, and **One UI icons**
->   for items.
->
-> Its releases are signed with a different key than the official app's: uninstall the official BentoBar before
-> installing one.
+> **This is a fork** of [Meridian11Labs/bentobar](https://github.com/Meridian11Labs/bentobar), on the `notch-items`
+> branch, made for Samsung tablets and phones with One UI. Everything it adds is in
+> [What this fork adds](#what-this-fork-adds) and [Root](#root). Its releases are signed with a different key than
+> the official app's: uninstall the official BentoBar before installing one.
+
+## What this fork adds
+
+**BentoBar in a Dynamic Island.** [Fonta's Dynamic Notch for Android](https://github.com/Nessuno6/FontaDynamicNotch/tree/android)
+shows BentoBar's items as small wings around the camera, and lists them all in a tab of its own (the picture below).
+With your permission and **Look › Other apps** on, another app can:
+
+- read the items, with their icons and live values, as BentoBar shows them;
+- open an item's own BentoBar menu right where it shows the item, on a tap or when the mouse rests on it, and close it
+  again (when the notch opens, say);
+- hide the items it shows from BentoBar's bar, or the whole bar, while it shows them. When that app stops (its switch
+  off, or it closes), the bar comes back by itself within two minutes. An external display keeps BentoBar's whole bar.
+
+**One UI's look.**
+
+- **Icons:** every one of BentoBar's icons has a One UI version, in the bar, its menus and the app. **Look › Icons**
+  switches between **Material 3 Expressive** and **One UI**. They come from the One UI icon pack (MIT, see
+  `ONEUI-ICONS-LICENSE`) and One UI's own system icons for devices.
+- **Dialogs:** the update prompts are the device's own dialogs, so on Samsung they look like the rest of One UI.
+
+**Widgets.**
+
+- **Home screen:** Device batteries as arcs, in four sizes and a grid of your own.
+- **Lock screen:** Device batteries for **One UI's lock screen**, with 1 or 2 devices (long-press the lock screen ›
+  Edit › Widgets). One UI keeps a lock screen widget off the home screen, so these are widgets of their own.
+
+**Device batteries, further.**
+
+- **Link** a phone and a tablet that both run BentoBar (through Google Play services, encrypted): each shows the
+  other's battery and devices.
+- **Charging cases:** the earbuds' case level as last seen, since Samsung knows it only while an earbud is in it.
+- **Charge speed:** how fast the charger charges, in Samsung's own steps: Adaptive fast, Super fast, Super fast 2.0.
+
+**Updates from inside the app.** Six times a day BentoBar asks GitHub for this fork's latest release and notifies you
+of a newer one. Tap it: the first time, Android asks you to let BentoBar install apps; then BentoBar downloads the APK
+and Android's installer does the rest. **Setup › Online services** has **Check for updates** (off stops the checks)
+and **Check now**. See [Privacy](#privacy) for exactly what is asked.
+
+## Root
+
+BentoBar works fully without root. On a **rooted** device it can also show what Android keeps from ordinary apps:
+
+| Where | What root adds | Why it helps |
+|---|---|---|
+| **CPU menu** | the **CPU's and GPU's temperatures**, and **which apps use the CPU** most (yours, or yours and the system's) | see what's heating the device or draining the battery |
+| **Memory menu** | **which apps hold the most memory** | find what fills the RAM before the system starts closing apps |
+| **Battery menu** | the battery's **real charge-cycle count** and its **health in percent** | Android reports 0 cycles to apps; this is the battery's actual wear |
+| **Device batteries** | a **Galaxy watch's, ring's and earbuds'** levels from Samsung's own device list | the same levels One UI's battery widget shows, including each earbud and the case |
+
+How it asks: through `su`, only while the menu that shows it is open (the apps using the CPU every 3 seconds), and
+only reading, never changing anything. Where root is refused or missing, those rows just don't show, and BentoBar
+doesn't ask again until it restarts. Nothing root reads is kept or logged. The apps lists are set by the CPU item's
+**Apps using the CPU** and the Memory item's **Apps using memory** (Off, Apps, Apps and system).
 
 <p align="center"><sub>Made by Meridian11 LLC, proudly developed on a Googlebook.
 Not affiliated with or endorsed by any employer (<a href="#about-this-project">more</a>).</sub></p>
@@ -55,7 +99,7 @@ them away. Like a bento box: everything in its compartment, and the whole thing 
 
 <p align="center">
   <img src="docs/images/bar.png" width="880" alt="BentoBar in a One UI tablet's status bar, over an app and over the wallpaper with an item's menu open">
-  <br><sub>With hidden items behind ‹ (a Look setting; the default shows everything that fits), folded (top) and revealed (bottom): a world clock, battery and memory slide in next to the running timer.</sub>
+  <br><sub>BentoBar after the clock on a One UI tablet: over an app (top), and over the wallpaper with Device batteries' menu open (bottom).</sub>
 </p>
 
 - **Show when active:** a hidden item can pop out on its own while it has something to say, such
@@ -107,6 +151,7 @@ hides when an app goes full screen or the screen locks.
 
 <p align="center">
   <img src="docs/images/menus.png" width="880" alt="BentoBar menus with One UI icons: battery, CPU, memory and device batteries (names and apps blurred)">
+  <br><sub>Battery, CPU, Memory and Device batteries, each under its item. With root, the CPU menu adds temperatures and the apps using it, and Memory the apps holding it. Names and apps are blurred.</sub>
 </p>
 
 ## Settings
@@ -121,7 +166,7 @@ status bar right away.
 
 <p align="center">
   <img src="docs/images/settings-pages.png" width="880" alt="Adding items, and the look and behaviour options with the Icons choice: Material 3 Expressive or One UI">
-  <br><sub>Adding items, and choosing where BentoBar sits and how it looks.</sub>
+  <br><sub>Adding items, and choosing where BentoBar sits and how it looks, with Icons: Material 3 Expressive or One UI.</sub>
 </p>
 
 ## Install
