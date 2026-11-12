@@ -43,7 +43,7 @@
 Not affiliated with or endorsed by any employer (<a href="#about-this-project">more</a>).</sub></p>
 
 <p align="center">
-  <img src="docs/images/hero.png" width="880" alt="BentoBar's items in the Googlebook status bar, with the CPU menu open under the CPU item">
+  <img src="docs/images/hero.png" width="880" alt="BentoBar's items as wings of Fonta's Dynamic Notch on a One UI tablet, with the Heat menu open under the Heat item">
 </p>
 
 ## What it does
