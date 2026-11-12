@@ -32,15 +32,44 @@
 
 ## What this fork adds
 
-**BentoBar in a Dynamic Island.** [Fonta's Dynamic Notch for Android](https://github.com/Nessuno6/FontaDynamicNotch/tree/android)
-shows BentoBar's items as small wings around the camera, and lists them all in a tab of its own (the picture below).
-With your permission and **Look › Other apps** on, another app can:
+### BentoBar in a Dynamic Island
 
-- read the items, with their icons and live values, as BentoBar shows them;
-- open an item's own BentoBar menu right where it shows the item, on a tap or when the mouse rests on it, and close it
-  again (when the notch opens, say);
-- hide the items it shows from BentoBar's bar, or the whole bar, while it shows them. When that app stops (its switch
-  off, or it closes), the bar comes back by itself within two minutes. An external display keeps BentoBar's whole bar.
+[Fonta's Dynamic Notch for Android](https://github.com/Nessuno6/FontaDynamicNotch/tree/android) is a Dynamic Island
+around the camera. With this fork, BentoBar's items live in it (the picture below):
+
+- **Wings:** items you choose sit beside the closed notch as small square wings, each with its icon and live value,
+  left or right, in any order and as many as fit. The notch keeps itself centred on the camera and resizes whenever a
+  wing, a live notification or the music changes, with no empty gaps.
+- **A BentoBar tab** in the open notch lists every item with its value. Hold one to put it on the **Left** or
+  **Right** wing, or take it off.
+- **Menus where you look:** tap a wing, or an item in the tab, and BentoBar's own menu for it opens right under it,
+  as it would under the bar. With a mouse, resting the pointer on a wing opens it too (after the notch's hover delay);
+  moving on to the notch closes that menu as the notch opens.
+- **One bar, not two:** items on the wings leave BentoBar's bar. With the notch's **Hide BentoBar's own bar** on, the
+  whole bar steps aside, ‹ and its pill included, since every item is in the notch's tab.
+- **It comes back:** switch the notch off (its Quick Settings tile, or its service) and BentoBar's bar returns at
+  once. If the notch stops without saying so, the bar returns by itself within two minutes. After BentoBar itself
+  restarts or updates, its bar can show beside the notch for up to a minute, until the notch claims it again.
+- **Same look:** the icons the notch shows are BentoBar's, so **Look › Icons** (Material 3 Expressive or One UI)
+  applies to the notch too.
+
+To set it up: in BentoBar, turn on **Look › Other apps**; in the notch's settings, turn on **BentoBar › Show BentoBar
+in the notch**, allow it to read BentoBar's items when Android asks, and choose **Hide BentoBar's own bar** if you
+like. Any other app can do the same: see [The bar's items in your app](#the-bars-items-in-your-app).
+
+### On a second display
+
+Connect a monitor (in Samsung DeX or Android's desktop mode) or a wireless display, and BentoBar puts a bar of its own
+in **that display's taskbar**, next to its system icons, with every item and its menus opening upward from the
+taskbar. **Look › Show on** chooses where BentoBar appears: **All displays**, **This screen** (the device's own) or
+**Other displays** (the monitors only).
+
+- The notch lives on the device's own screen only, so **a second display always keeps BentoBar's whole bar**, even
+  while the notch has taken it over on the device.
+- Screen recording and screen mirroring (they copy this screen) and private displays get no bar of their own; a display
+  without a taskbar shows none until it has one.
+- The **External displays** item shows the monitor's resolution and refresh rate (`1440p 60Hz`), and can keep the
+  device awake while it's connected.
 
 **One UI's look.**
 
