@@ -23,6 +23,19 @@
   <img src="https://img.shields.io/badge/developed_on-a_Googlebook-1F6F66" alt="Developed on a Googlebook">
 </p>
 
+> **This is a fork** of [Meridian11Labs/bentobar](https://github.com/Meridian11Labs/bentobar) with these additions,
+> on the `notch-items` branch:
+>
+> - **Item sharing:** other apps can show BentoBar's items themselves, with your permission and the
+>   **Look › Other apps** switch. They can open an item's own menu where they show it (on a tap or when the pointer
+>   rests on it), close it again, and hide items, or the whole strip, from BentoBar's bar while they show them.
+>   External displays always keep their whole strip.
+> - **Widgets** for the home screen, **links** to single items, a **charge speed** reading, extra readings on
+>   rooted devices, and **One UI icons** for items.
+>
+> Its releases are signed with a different key than the official app's: uninstall the official BentoBar before
+> installing one.
+
 <p align="center"><sub>Made by Meridian11 LLC, proudly developed on a Googlebook.
 Not affiliated with or endorsed by any employer (<a href="#about-this-project">more</a>).</sub></p>
 

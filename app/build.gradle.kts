@@ -51,6 +51,11 @@ android {
         compose = true
         buildConfig = true
     }
+    lint {
+        // The cross-device library declares Fragment 1.0.0, which this check reads; the build resolves 1.3.6, which
+        // activity results need (LinkActivity), so the release build's check is a false alarm.
+        disable += "InvalidFragmentVersionForActivityResult"
+    }
 }
 
 dependencies {
