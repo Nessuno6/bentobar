@@ -57,10 +57,34 @@ With your permission and **Look › Other apps** on, another app can:
 
 **Device batteries, further.**
 
-- **Link** a phone and a tablet that both run BentoBar (through Google Play services, encrypted): each shows the
-  other's battery and devices.
+- **Another device's batteries:** link your phone and your tablet, and each shows the other's battery and the devices
+  it sees (see [below](#another-devices-batteries-cross-device-sdk)).
 - **Charging cases:** the earbuds' case level as last seen, since Samsung knows it only while an earbud is in it.
 - **Charge speed:** how fast the charger charges, in Samsung's own steps: Adaptive fast, Super fast, Super fast 2.0.
+
+### Another device's batteries (Cross device SDK)
+
+Your phone sees your watch and earbuds; your tablet sees its keyboard and S Pen. Linked, each BentoBar shows both:
+the other device's own battery, and the devices that one sees, as rows of **Device batteries** (in its menu, in the
+bar when one runs low, and as arcs in the widgets).
+
+It's built on Google's **[Cross device SDK](https://developer.android.com/guide/topics/connectivity/cross-device-sdk/overview)**,
+which runs in Google Play services:
+
+1. Install this fork's BentoBar on both devices, signed in to the same Google account.
+2. On one, open **Device batteries**' menu and tap **Show another device's batteries**. Google's device picker lists
+   your own devices; pick the other one.
+3. Google Play services wakes BentoBar on that device, which accepts, and both say **Linked to …**.
+
+While linked, each side sends the other, at once and then every 30 seconds: its own battery (kind, level, charging and
+how fast) and the devices it shows itself (kind, name, level, charging, and which earbuds are in), never the devices the
+other side told it of. A device both see is listed once. If one side stops sending, its rows go after 90 seconds (the
+widgets keep them for two minutes, across a brief drop). The link lasts while BentoBar runs on both; when it drops,
+the menu offers **Link to … again**, one tap, and **Unlink** ends it.
+
+Google Play services finds the device and carries the messages, encrypted, between your two devices: BentoBar has no
+server, opens no connection of its own for this, and keeps nothing of what it's told on the device. The SDK is still a
+preview from Google (`0.1.0-preview01`), so linking may change with Google Play services.
 
 **Updates from inside the app.** Six times a day BentoBar asks GitHub for this fork's latest release and notifies you
 of a newer one. Tap it: the first time, Android asks you to let BentoBar install apps; then BentoBar downloads the APK
@@ -255,9 +279,15 @@ install apps; then it downloads the release's APK from GitHub and Android's inst
 
 Requests can go to those four services and GitHub and nowhere else (the code has no way to name another
 address), **Setup › Online services** switches each off, and a layout pasted from another install
-never turns them on. BentoBar sends nothing else anywhere: not your layout, your calendar, your
-clipboard, what's playing or anything it measures. It has no accounts of its own, no ads and no analytics, and it
-sends its developer nothing.
+never turns them on. BentoBar sends nothing else anywhere, except to your own other device when you link
+them (below): not your layout, your calendar, your clipboard, what's playing or anything it measures. It has no
+accounts of its own, no ads and no analytics, and it sends its developer nothing.
+
+**Linking another device is off until you do it.** When you link your phone and tablet
+([how](#another-devices-batteries-cross-device-sdk)), each sends the other its own battery and the batteries and names
+of the devices it sees (a watch, earbuds, a mouse), every 30 seconds while linked. Google Play services carries them,
+encrypted, between your two devices, which must be signed in to the same Google account; BentoBar has no server and
+keeps none of it. **Unlink** in Device batteries' menu ends it.
 
 **Clipboard** reads the text you copy while the item is in use, and keeps your last few copies in
 memory only: they are gone when BentoBar stops, and are never stored or sent. The snippets you pin are
