@@ -54,7 +54,7 @@ they have something to say, or wait **behind the ‹ button**: one click reveals
 them away. Like a bento box: everything in its compartment, and the whole thing neat.
 
 <p align="center">
-  <img src="docs/images/bar.png" width="880" alt="The status bar with BentoBar folded, then with its hidden items revealed">
+  <img src="docs/images/bar.png" width="880" alt="BentoBar in a One UI tablet's status bar, over an app and over the wallpaper with an item's menu open">
   <br><sub>With hidden items behind ‹ (a Look setting; the default shows everything that fits), folded (top) and revealed (bottom): a world clock, battery and memory slide in next to the running timer.</sub>
 </p>
 
@@ -106,7 +106,7 @@ hides when an app goes full screen or the screen locks.
 | **Text or emoji**, **Spacer** | anything you like | optional link |
 
 <p align="center">
-  <img src="docs/images/menus.png" width="880" alt="BentoBar menus: network, timer, the right-click item menu, tools, and BentoBar's ‹ menu with the hidden items">
+  <img src="docs/images/menus.png" width="880" alt="BentoBar menus with One UI icons: battery, CPU, memory and device batteries (names and apps blurred)">
 </p>
 
 ## Settings
@@ -116,11 +116,11 @@ A live preview of your bar at the top; below it, your items in three groups (**i
 status bar right away.
 
 <p align="center">
-  <img src="docs/images/settings.png" width="880" alt="BentoBar settings: the bar preview, the item list and the CPU item's options">
+  <img src="docs/images/settings.png" width="880" alt="BentoBar settings with One UI icons: the bar preview, the item list and the CPU item's options">
 </p>
 
 <p align="center">
-  <img src="docs/images/settings-pages.png" width="880" alt="Adding items, and the look and behavior options">
+  <img src="docs/images/settings-pages.png" width="880" alt="Adding items, and the look and behaviour options with the Icons choice: Material 3 Expressive or One UI">
   <br><sub>Adding items, and choosing where BentoBar sits and how it looks.</sub>
 </p>
 
