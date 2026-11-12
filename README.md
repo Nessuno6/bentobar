@@ -13,16 +13,16 @@
   <a href="../../releases/latest/download/BentoBar.apk"><b>⬇ Download BentoBar.apk</b></a>
   &nbsp;·&nbsp; <a href="#install">Install</a>
   &nbsp;·&nbsp; <a href="#privacy">Privacy</a>
-  &nbsp;·&nbsp; <a href="CHANGELOG.md">What's new</a>
+  &nbsp;·&nbsp; <a href="../../releases">What's new</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Googlebook_OS-Android_17-133F43" alt="Googlebook OS, Android 17">
   <img src="https://img.shields.io/badge/One_UI-9-1259E6" alt="One UI 9">
+  <img src="https://img.shields.io/badge/Googlebook_OS-Android_17-133F43" alt="Googlebook OS, Android 17">
   <img src="https://img.shields.io/badge/root-optional-6A4C93" alt="Root optional">
   <img src="https://img.shields.io/badge/goes_online-for_five_items_you_set_up_and_update_checks-2E7D32" alt="Goes online for five items you set up, and to check for updates">
   <img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT license">
-  <img src="https://img.shields.io/badge/developed_on-a_Googlebook-1F6F66" alt="Developed on a Googlebook">
+  <img src="https://img.shields.io/badge/fork_tested_on-a_Galaxy_tablet-1F6F66" alt="This fork tested on a Galaxy tablet">
 </p>
 
 > **This is a fork** of [Meridian11Labs/bentobar](https://github.com/Meridian11Labs/bentobar), on the `notch-items`
@@ -83,8 +83,8 @@ only reading, never changing anything. Where root is refused or missing, those r
 doesn't ask again until it restarts. Nothing root reads is kept or logged. The apps lists are set by the CPU item's
 **Apps using the CPU** and the Memory item's **Apps using memory** (Off, Apps, Apps and system).
 
-<p align="center"><sub>Made by Meridian11 LLC, proudly developed on a Googlebook.
-Not affiliated with or endorsed by any employer (<a href="#about-this-project">more</a>).</sub></p>
+<p align="center"><sub>BentoBar is made by Meridian11 LLC, developed on a Googlebook. This fork adds to it, and is tested on a
+Samsung Galaxy tablet with One UI 9; Meridian11 doesn't make or support it (<a href="#about-this-project">more</a>).</sub></p>
 
 <p align="center">
   <img src="docs/images/hero.png" width="880" alt="BentoBar's items as wings of Fonta's Dynamic Notch on a One UI tablet, with the Heat menu open under the Heat item">
@@ -122,10 +122,10 @@ hides when an app goes full screen or the screen locks.
 
 | Item | In the bar | In its menu |
 |---|---|---|
-| **CPU load** | busy %; can also pop out when the device runs hot | chart, per-core load, clock speeds, GPU load |
+| **CPU load** | busy %; can also pop out when the device runs hot | chart, per-core load, clock speeds, GPU load; with [root](#root), CPU and GPU temperatures and the apps using the CPU |
 | **Network speed** | ↓ download ↑ upload | chart, totals since start-up, connection |
-| **Memory** | RAM in use | used, available, chart |
-| **Battery details** | watts, %, temperature or time to full | power in or out, voltage, current, health, cycles, thermal state |
+| **Memory** | RAM in use | used, available, chart; with [root](#root), the apps holding the most memory |
+| **Battery details** | watts, %, temperature or time to full; while charging, its icon shows the charge speed (a double bolt for Super fast 2.0) | power in or out, charge speed, voltage, current, health, cycles (the real ones and health in percent with [root](#root)), thermal state |
 | **Storage** | free space | used and free, shortcuts to clean up |
 | **Date and calendar** | the date, in your format | a month view, and the day's events (all-day ones too) with **Join** and **Directions**; tasks that apps like Todoist sync to your calendar are left out, here and in Next meeting |
 | **Next meeting** | title and countdown, until 3 a.m. tomorrow; just the icon when there are no more meetings | today's meetings with **Join** and **Directions** |
@@ -135,7 +135,7 @@ hides when an app goes full screen or the screen locks.
 | **Keep awake** | coffee cup: click to switch | 15 min to "until I turn it off" |
 | **Sound** | volume, as a number or as a slider you click or drag | volume slider, play/pause/next |
 | **Now playing** | the title while something plays | artwork, position, previous, play and next, other players. The title needs notification access (optional); without it the item still shows that something plays and controls it |
-| **Device batteries** | the lowest of your mouse, keyboard, stylus or controller, when it's low | every device that reports a battery |
+| **Device batteries** | the lowest of your mouse, keyboard, stylus, controller, earbuds or watch, when it's low | every device that reports a battery, the earbuds' cases as last seen, and a linked phone or tablet running BentoBar; a Galaxy watch, ring or earbuds through Samsung's own list with [root](#root) |
 | **External displays** | connected monitor resolution & refresh rate (`4K 60Hz`), when plugged in | every display's resolution, refresh rate and HDR status, plus **Keep awake while connected** |
 | **Heat** | a word when Android slows a hot device | heat level, battery temperature |
 | **Clipboard & scratchpad** | latest snippet preview or count | pinned snippets and session clipboard history; click any row to copy and optionally paste into the active field |
@@ -145,7 +145,7 @@ hides when an app goes full screen or the screen locks.
 | **US stocks** *(online)* | US stocks you pick, one at a time (`AAPL 227.52 ▲1.2%`) for 3 seconds to a minute each, as you choose; can pop out on a big move | each stock's price, day change and range, and the market's hours. From [Finnhub](https://finnhub.io), with a free key of your own |
 | **Exchange rates** *(online)* | currency pairs you follow (`EUR/USD 1.0942`), rotating in the bar; can pop out on a big daily move | rate and daily % change for up to 6 pairs, plus an inline currency converter. From the European Central Bank via [Frankfurter](https://frankfurter.dev) (no key needed) |
 | **Tools** | toolbox | screenshot, lock, overview, all apps, power, settings shortcuts |
-| **Shortcut** | one action, as its icon, its name or both (📷 Screenshot) | none: a click does it. Screenshot, Report a bug (the Googlebook's Feedback app), lock, overview, all apps, notifications, Quick settings |
+| **Shortcut** | one action, as its icon, its name or both (📷 Screenshot) | none: a click does it. Screenshot, Report a bug (on a Googlebook, its Feedback app), lock, overview, all apps, notifications, Quick settings |
 | **App folder** / **App shortcut** | your apps | a grid of apps / one click to open |
 | **Text or emoji**, **Spacer** | anything you like | optional link |
 
@@ -171,15 +171,14 @@ status bar right away.
 
 ## Install
 
-BentoBar is made for Googlebooks (Googlebook OS, Android 17). Other Android 14+ devices with a
-status bar may work, but haven't been tested.
+BentoBar was made for Googlebooks (Googlebook OS, Android 17); this fork is made and tested on a Samsung Galaxy tablet
+with One UI 9 (Android 17), and runs on Android 14 or newer. If you have the official BentoBar, uninstall it first:
+this fork is signed with a different key, so Android won't install it over the official one.
 
-1. On your Googlebook, download
-   **[BentoBar.apk](../../releases/latest/download/BentoBar.apk)** from the latest release.
-2. Open it from Chrome's downloads or the Files app. If Android asks, allow Chrome (or Files) to
-   install apps, then tap **Install**. Google Play Protect may then say *"App blocked to protect
-   your device"* because it hasn't seen an app from this developer before: tap **More details** ›
-   **Install anyway**.
+1. On your device, download **[BentoBar.apk](../../releases/latest/download/BentoBar.apk)** from the latest release.
+2. Open it from your browser's downloads or My Files. If Android asks, allow that app to install apps, then tap
+   **Install**. Google Play Protect may then say *"App blocked to protect your device"* because it hasn't seen an app
+   from this developer before: tap **More details** › **Install anyway**.
 3. Open **BentoBar**. It says what its accessibility service does and asks whether you agree:
    **Agree** opens Android's Accessibility settings. (Later, the same is under **Setup** › **Turn on**.)
 4. Because BentoBar came from a download, Android guards this switch the first time:
@@ -194,7 +193,9 @@ About a day later, Android shows *"Review app with full device access"*. That's 
 for every app that uses an accessibility service. Keep BentoBar if you're happy with what it does
 (below).
 
-To update, install a newer `BentoBar.apk` over the old one; your layout stays.
+To update, tap the update notification (or **Setup › Online services › Check now**): BentoBar downloads the new
+release and Android installs it over the old one. Installing a newer `BentoBar.apk` by hand works too. Your layout
+stays either way.
 
 <a id="privacy"></a>
 ## Privacy: why an accessibility service, and what BentoBar does with it
@@ -213,7 +214,8 @@ with that access:
 
 BentoBar doesn't read other apps' windows and doesn't watch your keyboard, mouse or touches.
 
-**BentoBar goes online for five items only, and only after you set them up** on this device:
+**BentoBar goes online for five items, only after you set them up** on this device, and for this fork's update
+check (below):
 
 - **Weather** sends [Open-Meteo](https://open-meteo.com) the city you search for, and for the forecast
   the coordinates of the city you pick, rounded to about a kilometre: about every 30 minutes while the
@@ -276,15 +278,26 @@ asks BentoBar on this device. Turning the switch off stops every app at once; An
 take the permission back from one.
 
 If you use Android's backup, Android keeps a copy of BentoBar's settings in your Google account. Your
-AirLabs and Finnhub keys, the online switches and the sharing switch are left out of it.
+AirLabs and Finnhub keys, the online switches and the sharing switches are left out of it.
 
 **Usage access is optional and off by default.** If you turn it on (Setup, or the Network and
 Storage menus), BentoBar reads how much data and storage each app uses, to list the top five in
 those menus, and nothing else. Android's switch also covers which apps you use and when; BentoBar
 doesn't read that. Turn it off any time in Android's Usage access settings (Setup › Usage access ›
 Open setting takes you there).
-Android doesn't share other apps' CPU or memory use with apps at all, so the CPU and Memory menus
+Android doesn't share other apps' CPU or memory use with apps at all, so without root the CPU and Memory menus
 show the whole system instead.
+
+**Root is optional.** On a rooted device, and only if you allow BentoBar when your root manager asks, BentoBar reads
+what's listed under [Root](#root): temperatures, the apps using the CPU and memory, the battery's real cycles and
+health, and a Galaxy watch's or earbuds' levels. It reads only while the menu that shows it is open, changes nothing,
+and keeps and sends none of it.
+
+**Sharing the bar's items with other apps is off by default.** If you turn on **Look › Other apps**, an app can read
+what the bar shows (each item's icon and words, which can be a track's title or a meeting's name), open an item's
+menu and hide items from the bar while it shows them, but only after you grant it Android's permission *read the
+bar's items from BentoBar*, app by app. Nothing is sent anywhere: the app asks BentoBar on this device. Turning the
+switch off stops every app at once.
 
 | Permission | Used for |
 |---|---|
@@ -292,26 +305,29 @@ show the whole system instead.
 | Notifications *(optional)* | timer alerts, and the Live Update chip |
 | Calendar *(optional)* | Next meeting, and events in the month view |
 | Approximate location *(optional)* | Weather's My location, rounded to about 10 km before it is sent |
-| Alarms and reminders *(optional)* | timers that ring on the second while the Googlebook sleeps |
+| Alarms and reminders *(optional)* | timers that ring on the second while the device sleeps |
 | Usage access *(optional)* | the apps using the most data today and the largest apps, in the Network and Storage menus |
-| Internet | Weather (Open-Meteo), Flight (AirLabs) and US stocks (Finnhub), only after you set them up; this fork's update check (GitHub); nothing else |
+| Internet | Weather and Air quality (Open-Meteo), Exchange rates (Frankfurter), Flight (AirLabs) and US stocks (Finnhub), only after you set them up; this fork's update check (GitHub); nothing else |
 | Install apps *(asked when you first update from inside BentoBar)* | installing this fork's own update, which Android asks you to confirm |
 | Notification access *(optional)* | Now playing's title, artist and artwork; BentoBar receives no notifications |
+| Root *(optional, asked by your root manager)* | the readings under [Root](#root); nothing is changed |
 | Network state, launcher apps | the network menu, and picking apps for shortcuts |
 
-BentoBar also defines one permission for other apps, *read device batteries from BentoBar*: see
-[Device batteries in your app](#device-batteries-in-your-app).
+BentoBar also defines two permissions for other apps, *read device batteries from BentoBar* and *read the bar's
+items from BentoBar*: see [Device batteries in your app](#device-batteries-in-your-app) and
+[The bar's items in your app](#the-bars-items-in-your-app).
 
 ## Good to know
 
-- **Home screen widget.** *Device batteries* comes as a widget too (4 x 2, one to four devices, or a custom grid): an
+- **Widgets.** *Device batteries* comes as a home screen widget too (4 x 2, one to four devices, or a custom grid): an
   arc for this device and each of your others, the linked phone or tablet included. Long-press it, then Settings, to pin
-  devices to cells and set their order. It refreshes when a reading changes and every 15 minutes; tap it to refresh now.
+  devices to cells and set their order. On One UI there are also two lock screen widgets (1 or 2 devices). They refresh
+  when a reading changes and every 15 minutes; tap one to refresh now.
 - **System icons stay.** Android doesn't let an installed app hide or reorder the system's own
   icons (clock, Wi-Fi, battery, notifications), so BentoBar organises its own items next to them.
 - **Keyboard shortcut.** The launcher entry **BentoBar menu** opens BentoBar's menu with every item
   in it: arrows and Enter open an item's menu, Escape closes it. Give it a shortcut in the system's
-  keyboard shortcuts (Action + / › Customize), e.g. Action + T. BentoBar itself doesn't read keys.
+  keyboard shortcuts (on a Googlebook, Action + / › Customize), e.g. Action + T. BentoBar itself doesn't read keys.
 - **One chip.** Android shows one Live Update chip per app, with about seven characters of text,
   and hides it while that app's own window is open.
 - **CPU load** comes from each core's idle time (Android doesn't let apps read overall CPU usage),
@@ -349,6 +365,29 @@ The cursor's extras hold `enabled` (false while sharing is off, when every table
 `ContentObserver` on `content://com.meridian11.books.bentobar.devices` with descendants to hear when the
 rows change. A query is answered from a reading at most 10 seconds old, taken anew when needed.
 
+## The bar's items in your app
+
+This is how [Fonta's Dynamic Notch for Android](https://github.com/Nessuno6/FontaDynamicNotch/tree/android) shows
+BentoBar's items. Once the user turns on **Look › Other apps** and grants your app the permission:
+
+```xml
+<uses-permission android:name="com.meridian11.books.bentobar.permission.READ_BAR_ITEMS" />
+<queries><package android:name="com.meridian11.books.bentobar" /></queries>
+```
+
+query `content://com.meridian11.books.bentobar.items/items` (read only), one row an item: `id`, `type`, `title`,
+`text` (what the bar shows, or null), `label`, `description`, `active`, `tone`, `icon_png` (the item's icon as a PNG,
+One UI's when Look › Icons is One UI) and `in_bar`. The cursor's extras hold `enabled` and `version`; register a
+`ContentObserver` on `content://com.meridian11.books.bentobar.items` to hear when the rows change.
+
+`ContentResolver.call` on the same address does the rest:
+
+| Method | What it does |
+|---|---|
+| `open` (arg: the item's `id`; extras `left`, `top`, `right`, `bottom`: where you show it, in screen pixels) | what a click on the item does in the bar: its menu opens under that place, or the item acts. With extra `hover` true: only the menu, and an open one stays open |
+| `close` | closes the menu `open` last opened for you, if it's still showing |
+| `claim` (extras `hide`: a list of ids, `watch`, `whole`) | while you show items yourself: `hide` leaves them out of BentoBar's bar, `whole` hides the bar, `watch` keeps every item sampled. Held for two minutes: ask again every minute; ask with nothing to give it up |
+
 ## Build
 
 Needs JDK 21 and the Android SDK (platform 37).
@@ -358,12 +397,13 @@ Needs JDK 21 and the Android SDK (platform 37).
 ./gradlew :app:assembleRelease    # signed if ~/.config/bentobar/keystore.jks and keystore.pass exist
 ```
 
-`./bento` is the development helper (build, install, enable, test hooks, screenshots) for a
-Googlebook connected over Wireless debugging. [AGENTS.md](AGENTS.md) explains how the code is
+`./bento` is the original project's development helper (build, install, enable, test hooks, screenshots), made for a
+Googlebook connected over Wireless debugging; on another device, `adb install` the APK. [AGENTS.md](AGENTS.md) explains how the code is
 organised, and [docs/research](docs/research) has the platform findings behind the design.
 
-Releases are built and signed by GitHub Actions when a `v<version>` tag is pushed, so nobody needs
-the release key on their machine: see [docs/RELEASING.md](docs/RELEASING.md).
+The official BentoBar's releases are built and signed by GitHub Actions when a `v<version>` tag is pushed (see
+[docs/RELEASING.md](docs/RELEASING.md)). This fork's releases are built on its maintainer's machine and signed with the
+fork's own key, which is why they don't install over the official app.
 
 ## About this project
 
@@ -378,10 +418,19 @@ this release.
 
 — Meridian11
 
+### This fork
+
+This fork adds the items' sharing with other apps (for Fonta's Dynamic Notch), One UI icons and look, lock screen
+widgets, updates from inside the app and the readings with root, and is tested on a Samsung Galaxy tablet with One UI
+9. It's not made, reviewed or supported by Meridian11 or Samsung; report its problems on
+[this fork's issues](../../issues), not upstream.
+
 ## License
 
 BentoBar is free software under the [MIT License](LICENSE). It includes Google's
 [Material Symbols](https://fonts.google.com/icons) (Apache License 2.0) and uses Jetpack Compose,
-AndroidX, Kotlin and kotlinx.serialization (Apache License 2.0).
+AndroidX, Kotlin and kotlinx.serialization (Apache License 2.0). This fork also includes icons from the One UI icon
+pack (MIT, see [ONEUI-ICONS-LICENSE](ONEUI-ICONS-LICENSE)); One UI is Samsung's, and the pack isn't affiliated with
+or endorsed by Samsung.
 
 BentoBar is an independent project.
