@@ -204,6 +204,8 @@ private fun BarPreview(states: Map<String, ItemState>, selected: String?, onSele
         ColorMode.LIGHT -> Contrast.resolve(Color.White, null)
         ColorMode.DARK -> Contrast.resolve(Contrast.DARK_TEXT, null)
         ColorMode.AUTO -> live ?: Contrast.resolve(Color.White, null)
+        // The running strip's look is the opposite already.
+        ColorMode.OPPOSITE -> live ?: Contrast.resolve(Contrast.DARK_TEXT, null)
     }
     val look = StripLook(bar.fg, bar.barDark, cfg.textSize, cfg.spacing.dp, cfg.pill, bar.background)
     val barBrush = when {

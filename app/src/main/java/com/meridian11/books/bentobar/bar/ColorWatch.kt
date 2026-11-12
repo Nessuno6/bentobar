@@ -37,8 +37,10 @@ class ColorWatch {
     private val quick = ArrayList<Long>()
     private var again = 0
     private var nothing = 0
-    /** When screenshots were asked for within the last minute, oldest first. */
+    /** When screenshots a cause asked for were asked for within the last minute, oldest first (checks don't count). */
     private val asked = ArrayDeque<Long>()
+    /** When the last screenshot of any kind, checks too, was asked for. */
+    private var lastAsked: Long? = null
     /** The first reading a change of windows still waits for. */
     private var windowsDue: Long? = null
     /** When a change of windows last got its first reading. */
@@ -56,7 +58,7 @@ class ColorWatch {
         val busy = busy(now)
         var start = now + first
         // Not on the heels of a screenshot just asked for: Android would refuse this one.
-        asked.lastOrNull()?.let { start = maxOf(start, it + if (busy) BarNeighbours.APART_MS else MERGE_MS) }
+        lastAsked?.let { start = maxOf(start, it + if (busy) BarNeighbours.APART_MS else MERGE_MS) }
         val times = (if (busy) cause.busy else cause.after).map { start + it }
         quick.clear(); windowsDue = null
         if (cause == Cause.SLOW) { slow.clear(); slow += times } else quick += times
@@ -74,6 +76,12 @@ class ColorWatch {
         windowsDue = quick.first()
     }
 
+    /**
+     * Whether a check (a reading on a timer, "Keep checking the status bar") may be taken at [now]: no series a
+     * cause asked for is under way, and the last screenshot was asked for at least [CHECK_GAP_MS] ago.
+     */
+    fun idle(now: Long): Boolean = slow.isEmpty() && quick.isEmpty() && lastAsked.let { it == null || now - it >= CHECK_GAP_MS }
+
     /** Milliseconds from [now] to the next reading (0 when it is overdue), or null when none is to come. */
     fun due(now: Long): Long? = (slow + quick).minOrNull()?.let { (it - now).coerceAtLeast(0) }
 
@@ -81,9 +89,11 @@ class ColorWatch {
      * A screenshot is asked for at [now]. It serves every reading that was due by now, or would be
      * within the moment, and from here on a cause knows that it is on its way.
      */
-    fun taken(now: Long) {
-        asked += now
-        while (asked.first() <= now - MINUTE_MS) asked.removeFirst()
+    fun taken(now: Long, check: Boolean = false) {
+        lastAsked = now
+        // Checks keep their own pace ([checkEvery]): counted in the budget, they would hold back what causes ask for.
+        if (!check) asked += now
+        while (asked.isNotEmpty() && asked.first() <= now - MINUTE_MS) asked.removeFirst()
         slow.removeAll { it <= now + MERGE_MS }
         quick.removeAll { it <= now + MERGE_MS }
         windowsDue?.let { if (it <= now + MERGE_MS) { windowsRead = now; windowsDue = null } }
@@ -146,6 +156,19 @@ class ColorWatch {
     companion object {
         /** What a reading that [seen] the bar (null: it gave nothing) is, against the colours the strip [had]. */
         fun result(had: Any?, seen: Any?): Result = when (seen) { null -> Result.NOTHING; had -> Result.SAME; else -> Result.CHANGED }
+
+        /** "Keep checking the status bar": a check every second while things move… */
+        const val CHECK_FAST_MS = 1_000L
+        /** …every four seconds once nothing has moved for [ACTIVE_MS]… */
+        const val CHECK_CALM_MS = 4_000L
+        const val ACTIVE_MS = 10_000L
+        /** …and one this soon after another app comes to the front, the moment the bar most often changes. */
+        const val SWITCH_MS = 300L
+        /** A check waits until the last screenshot is this old (Android refuses one within a third of a second). */
+        const val CHECK_GAP_MS = 500L
+
+        /** How long to the next check, [sinceStirMs] after the last sign that the bar may change (a window event, a reading that differed). */
+        fun checkEvery(sinceStirMs: Long): Long = if (sinceStirMs < ACTIVE_MS) CHECK_FAST_MS else CHECK_CALM_MS
 
         /** Readings closer together than this are one reading; Android refuses a screenshot within a third of a second of the last. */
         private const val MERGE_MS = 400L

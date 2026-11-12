@@ -54,6 +54,8 @@ object Env {
         // The switches for the three online services and the user's keys: in the no-backup directory, which
         // Android leaves out of backups and device transfers. Then the rules for going online at all.
         Online.init(app.noBackupFilesDir)
+        // Whether other apps may read Device batteries: this install's choice too, beside it.
+        com.meridian11.books.bentobar.data.Sharing.init(app.noBackupFilesDir)
         wireOnline()
         FlightItem.sweepAtStart()
         NowPlaying.init(app)
@@ -347,6 +349,8 @@ class BatterySampler {
     var level = 0.0; private set
     var charging = false; private set
     var plugged = 0; private set
+    /** How fast the charger charges, where the device says (Samsung's); [ChargeSpeed.NORMAL] when unplugged. */
+    var speed = ChargeSpeed.NORMAL; private set
     var status = BatteryManager.BATTERY_STATUS_UNKNOWN; private set
     var voltageMv = 0; private set
     var currentUa = 0L; private set
@@ -371,6 +375,7 @@ class BatterySampler {
             status = i.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
             charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
             plugged = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+            speed = if (plugged == 0) ChargeSpeed.NORMAL else ChargeSpeed.of(i.getIntExtra("charger_type", 0), i.getBooleanExtra("hv_charger", false))
             voltageMv = i.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0)
             tempC = i.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) / 10.0
             health = i.getIntExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_UNKNOWN)

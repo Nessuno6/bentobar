@@ -76,7 +76,7 @@ object CpuItem : ItemType("cpu", R.string.item_cpu_title, Sym.MEMORY, R.string.i
             }, Fmt.percent(c.total)))
     }
 
-    override val menu: @Composable (ItemConfig, MenuHost) -> Unit = { _, host ->
+    override val menu: @Composable (ItemConfig, MenuHost) -> Unit = { item, host ->
         rememberTick()
         val c = Env.cpu
         androidx.compose.runtime.DisposableEffect(Unit) {
@@ -89,6 +89,14 @@ object CpuItem : ItemType("cpu", R.string.item_cpu_title, Sym.MEMORY, R.string.i
         MenuCard(Sym.MEMORY, stringResource(R.string.cpu_menu_title),
             if (c.available) pluralStringResource(R.plurals.cpu_menu_subtitle, c.perCore.size, Fmt.percent(c.total), c.perCore.size)
             else stringResource(R.string.cpu_menu_unavailable)) {
+            // On a rooted device, with the item's "Apps using the CPU" on: which apps use it, read every few seconds while
+            // this menu is open.
+            val shownApps = AppsShown.of(item)
+            val showApps = shownApps != AppsShown.OFF
+            if (showApps) androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { RootCpu.want(); kotlinx.coroutines.delay(1_000) } }
+            val apps = if (showApps) RootCpu.users else null
+            processor()?.let { InfoRow(stringResource(R.string.cpu_processor), it) }
+            ChipTemps()
             if (c.available) {
                 InfoRow(stringResource(R.string.cpu_overall), Fmt.percent(c.total), MaterialTheme.colorScheme.primary)
                 Sparkline(c.history.toList(), max = 1.0)
@@ -98,10 +106,13 @@ object CpuItem : ItemType("cpu", R.string.item_cpu_title, Sym.MEMORY, R.string.i
                 SectionLabel(stringResource(R.string.cpu_cores))
                 CoreBars(c.perCore)
                 Spacer(Modifier.height(6.dp))
-                c.clusters.forEach { cl ->
-                    // "Cores 0–3" for a group; a core with its own clock speed (each one, on some Intel
-                    // chips) is "Core 0".
-                    InfoRow(stringResource(if (cl.cores.all { it.isDigit() }) R.string.cpu_core_one else R.string.cpu_cluster, cl.cores), stringResource(R.string.cpu_cluster_clock,
+                // Fastest first, named by their place: Prime, Performance, Efficiency ("Prime · core 7").
+                val roles = CoreRoles.of(c.clusters.map { it.maxKhz })
+                c.clusters.withIndex().sortedByDescending { it.value.maxKhz }.forEach { (i, cl) ->
+                    // "Cores 0–3" for a group; a core with its own clock speed (each one, on some Intel chips) is "Core 0".
+                    val which = stringResource(if (cl.cores.all { it.isDigit() }) R.string.cpu_core_one else R.string.cpu_cluster, cl.cores)
+                    val label = roles[i]?.let { stringResource(R.string.cpu_role_row, stringResource(it.words), which.lowercase()) } ?: which
+                    InfoRow(label, stringResource(R.string.cpu_cluster_clock,
                         String.format(Locale.ROOT, "%.2f", cl.curKhz / 1e6), String.format(Locale.ROOT, "%.2f", cl.maxKhz / 1e6)))
                 }
                 c.gpu?.let { g ->
@@ -110,8 +121,19 @@ object CpuItem : ItemType("cpu", R.string.item_cpu_title, Sym.MEMORY, R.string.i
                     Sparkline(c.gpuHistory.toList(), color = MaterialTheme.colorScheme.tertiary, max = 1.0)
                 }
             } else HeatRow(Heat.status()) // whether the device is hot doesn't depend on its sharing the CPU's load
+            if (!apps.isNullOrEmpty()) {
+                // Apps you open (with a launcher icon) and the system's own (services, and processes that aren't apps).
+                for ((system, title) in listOf(false to R.string.cpu_top_apps, true to R.string.cpu_top_system)) {
+                    if (system && !shownApps.system) continue
+                    val rows = apps.filter { it.system == system }.take(RootCpu.EACH)
+                    if (rows.isEmpty()) continue
+                    MenuDivider()
+                    SectionLabel(stringResource(title))
+                    rows.forEach { InfoRow(it.name, Fmt.percent(it.share)) }
+                }
+            }
             Spacer(Modifier.height(6.dp))
-            MenuNote(stringResource(R.string.cpu_per_app_note))
+            MenuNote(stringResource(if (apps != null) R.string.cpu_per_app_root_note else R.string.cpu_per_app_note))
             MenuDivider()
             MenuEntry(Sym.BOLT, stringResource(R.string.cpu_battery_usage)) { host.close(); Env.launch(Intent(Intent.ACTION_POWER_USAGE_SUMMARY)) }
             MenuEntry(Sym.APPS, stringResource(R.string.common_apps)) { host.close(); Env.launch(Intent(Settings.ACTION_APPLICATION_SETTINGS)) }
@@ -128,6 +150,7 @@ object CpuItem : ItemType("cpu", R.string.item_cpu_title, Sym.MEMORY, R.string.i
             // Off takes the key out again: the layout is then as it was before the switch existed.
             set(item.with(CpuRule.ALSO_HOT, if (on) "true" else null))
         }
+        AppsShownRow(item, R.string.cpu_show_apps, R.string.cpu_show_apps_help, set)
     }
 }
 
@@ -146,3 +169,54 @@ private fun HeatRow(status: Int) {
 private fun developerOptionsOn(): Boolean = runCatching {
     Settings.Global.getInt(Env.app.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1
 }.getOrDefault(false)
+
+/** The processor's maker and model as Android names them ("Mediatek MT6993"); null where it doesn't. */
+private fun processor(): String? {
+    val maker = android.os.Build.SOC_MANUFACTURER.orEmpty().takeIf { it.isNotBlank() && it != android.os.Build.UNKNOWN }
+    val model = android.os.Build.SOC_MODEL.orEmpty().takeIf { it.isNotBlank() && it != android.os.Build.UNKNOWN } ?: return null
+    return listOfNotNull(maker, model).joinToString(" ")
+}
+
+/** What each group of cores is, by its top clock speed: the fastest Prime, the slowest Efficiency, the rest Performance. */
+object CoreRoles {
+    enum class Role(val words: Int) { PRIME(R.string.cpu_role_prime), PERFORMANCE(R.string.cpu_role_performance), EFFICIENCY(R.string.cpu_role_efficiency) }
+
+    /**
+     * Each group's role, for groups whose top speeds are [maxKhz]. One kind of core: no roles (null each). Two: the slower
+     * Efficiency, the faster Performance. Three or more: also the fastest Prime, as on a chip with one core above the rest.
+     */
+    fun of(maxKhz: List<Long>): List<Role?> {
+        val speeds = maxKhz.distinct().sorted()
+        if (speeds.size < 2) return maxKhz.map { null }
+        return maxKhz.map { k ->
+            when (k) {
+                speeds.first() -> Role.EFFICIENCY
+                speeds.last() -> if (speeds.size >= 3) Role.PRIME else Role.PERFORMANCE
+                else -> Role.PERFORMANCE
+            }
+        }
+    }
+}
+
+/**
+ * The CPU's and GPU's temperatures, on a rooted device (its thermal zones only root may read), read every few seconds
+ * while the menu showing them is open. Nothing without root.
+ */
+@Composable
+internal fun ChipTemps() {
+    androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { RootThermal.want(); kotlinx.coroutines.delay(1_000) } }
+    val t = RootThermal.temps ?: return
+    fun c(v: Double) = String.format(Locale.ROOT, "%.1f °C", v)
+    t.cpu?.let { InfoRow(stringResource(R.string.cpu_temp), c(it), if (it >= 80) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }
+    t.gpu?.let { InfoRow(stringResource(R.string.gpu_temp), c(it)) }
+}
+
+/** "Apps in the menu" for the CPU and Memory items: off, your apps, or your apps and the system's. Root lists them. */
+@Composable
+internal fun AppsShownRow(item: ItemConfig, label: Int, help: Int, set: (ItemConfig) -> Unit) {
+    com.meridian11.books.bentobar.ui.ChoiceRow(stringResource(label), listOf(
+        AppsShown.OFF to stringResource(R.string.apps_shown_off),
+        AppsShown.APPS to stringResource(R.string.apps_shown_apps),
+        AppsShown.ALL to stringResource(R.string.apps_shown_all),
+    ), AppsShown.of(item), help = stringResource(help)) { v -> set(item.with(AppsShown.OPTION, if (v == AppsShown.ALL) null else v.key)) }
+}

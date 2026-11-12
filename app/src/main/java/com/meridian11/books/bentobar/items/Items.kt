@@ -105,7 +105,7 @@ object Ticker {
     @Volatile var focusItem: String? = null
 
     /** Items worth sampling now: [TickRules.needed]. */
-    private fun needed(cfg: BarConfig): List<ItemConfig> = TickRules.needed(cfg, "settings" in users, revealHidden, focusItem)
+    private fun needed(cfg: BarConfig): List<ItemConfig> = TickRules.needed(cfg, "settings" in users, revealHidden, focusItem, Claims.claim.value)
 
     private val loop = object : Runnable {
         override fun run() {
@@ -230,6 +230,8 @@ object Ticker {
         heldFor.keys.retainAll(ids)
         _states.value = next
         _tick.value = System.currentTimeMillis()
+        // Other apps reading the bar's items (ItemsProvider) hear of new words; nothing happens while that sharing is off.
+        ItemsProvider.changed(next)
     }
 
     /**

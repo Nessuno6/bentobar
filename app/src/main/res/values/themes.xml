@@ -10,6 +10,12 @@
     <!-- The "BentoBar menu" entry (for a keyboard shortcut): no window of its own, it only opens the bar's menu. -->
     <style name="Theme.BentoBar.NoDisplay" parent="@android:style/Theme.NoDisplay" />
 
+    <!-- Device batteries' link (ui/LinkActivity): no window of its own, but it waits for Google's device picker. -->
+    <style name="Theme.BentoBar.Invisible" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
     <!--
       A popup's window (bar/MenuWindow.kt): see-through (the platform blurs only behind a translucent window), floating,
       with no dim, frame, elevation, minimum width or window animation of its own: the popup draws and moves itself.

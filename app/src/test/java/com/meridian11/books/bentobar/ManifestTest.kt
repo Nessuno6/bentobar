@@ -31,7 +31,7 @@ class ManifestTest {
     }
 
     @Test fun thePermissionsAreTheseAndNoOthers() {
-        // No Bluetooth, no precise or background location, no reading of notifications as a permission: a new one is added here on purpose.
+        // Bluetooth only to connect (Device batteries' headphones, asked for from its menu): no scanning. No precise or background location, no reading of notifications as a permission: a new one is added here on purpose.
         // Approximate location is Weather's My location, asked for only when an item chooses it.
         assertEquals(setOf(
             "android.permission.INTERNET",
@@ -40,6 +40,7 @@ class ManifestTest {
             "android.permission.WAKE_LOCK",
             "android.permission.POST_PROMOTED_NOTIFICATIONS",
             "android.permission.READ_CALENDAR",
+            "android.permission.BLUETOOTH_CONNECT",
             "android.permission.ACCESS_COARSE_LOCATION",
             "android.permission.SCHEDULE_EXACT_ALARM",
             "android.permission.QUERY_ADVANCED_PROTECTION_MODE",
@@ -100,11 +101,39 @@ class ManifestTest {
 
     @Test fun theExportedPartsAreTheOnesAndroidNeeds() {
         // The launcher's two entries, the accessibility service, the three tiles and the notification listener:
-        // each is guarded by a system permission or is an activity the user starts.
+        // each is guarded by a system permission or is an activity the user starts; and Device batteries' link, which
+        // Google Play services start to accept a link (it does nothing without the token they give it).
         val exported = (application.all("activity") + application.all("service") + application.all("receiver") + application.all("provider"))
             .filter { it.attr("exported") == "true" }.map { it.attr("name") }.toSet()
-        assertEquals(setOf(".ui.MainActivity", ".ui.BarMenuActivity", ".bar.BarService", ".tile.BarTile", ".tile.AwakeTile", ".tile.TimerTile",
-            ".items.MediaAccess"), exported)
+        assertEquals(setOf(".ui.MainActivity", ".ui.BarMenuActivity", ".ui.LinkActivity", ".bar.BarService", ".tile.BarTile", ".tile.AwakeTile", ".tile.TimerTile",
+            ".items.MediaAccess", ".items.DevicesProvider", ".items.ItemsProvider", ".widget.WidgetSettingsActivity"), exported)
         for (service in application.all("service")) assertNotNull(service.attr("name"), service.attr("permission").takeIf { it.isNotEmpty() })
+    }
+
+    @Test fun otherAppsReadDeviceBatteriesOnlyWithAPermissionTheUserGrants() {
+        // The one permission BentoBar defines: dangerous, so Android asks the user app by app. The provider is read
+        // only, and nothing reaches it without that permission, to read or to write.
+        val name = "com.meridian11.books.bentobar.permission.READ_DEVICE_BATTERIES"
+        val permission = manifest.all("permission").single { it.attr("name") == name }
+        assertEquals("dangerous", permission.attr("protectionLevel"))
+        val provider = application.all("provider").single { it.attr("name") == ".items.DevicesProvider" }
+        assertEquals("com.meridian11.books.bentobar.devices", provider.attr("authorities"))
+        assertEquals(name, provider.attr("readPermission"))
+        assertEquals(name, provider.attr("writePermission"))
+        assertEquals("", provider.attr("grantUriPermissions"))
+    }
+
+    @Test fun otherAppsReadTheBarsItemsOnlyWithAPermissionOfItsOwn() {
+        // The second and last permission BentoBar defines, dangerous too: an app allowed to read Device batteries is
+        // not thereby allowed to read what the bar says. Its provider is read only as well.
+        val name = "com.meridian11.books.bentobar.permission.READ_BAR_ITEMS"
+        assertEquals(2, manifest.all("permission").size)
+        val permission = manifest.all("permission").single { it.attr("name") == name }
+        assertEquals("dangerous", permission.attr("protectionLevel"))
+        val provider = application.all("provider").single { it.attr("name") == ".items.ItemsProvider" }
+        assertEquals("com.meridian11.books.bentobar.items", provider.attr("authorities"))
+        assertEquals(name, provider.attr("readPermission"))
+        assertEquals(name, provider.attr("writePermission"))
+        assertEquals("", provider.attr("grantUriPermissions"))
     }
 }

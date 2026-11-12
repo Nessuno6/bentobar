@@ -82,9 +82,14 @@ object MemoryItem : ItemType("memory", R.string.item_memory_title, Sym.MEMORY_AL
             tone = if (m.low) Tone.WARN else Tone.NORMAL, desc = Env.str(R.string.memory_state_desc, Fmt.percent(m.used)))
     }
 
-    override val menu: @Composable (ItemConfig, MenuHost) -> Unit = { _, host ->
+    override val menu: @Composable (ItemConfig, MenuHost) -> Unit = { item, host ->
         rememberTick()
         val m = Env.mem
+        // On a rooted device, with "Apps using memory" on: which apps hold the most, read every few seconds while open.
+        val shownApps = AppsShown.of(item)
+        val showApps = shownApps != AppsShown.OFF
+        if (showApps) androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { RootMem.want(); kotlinx.coroutines.delay(1_000) } }
+        val apps = if (showApps) RootMem.users else null
         MenuCard(Sym.MEMORY_ALT, stringResource(R.string.item_memory_title), stringResource(R.string.memory_in_use, Fmt.percent(m.used))) {
             Meter(m.used.toFloat(), if (m.low) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             InfoRow(stringResource(R.string.common_used), Fmt.bytes((m.total - m.avail).toDouble()))
@@ -96,11 +101,25 @@ object MemoryItem : ItemType("memory", R.string.item_memory_title, Sym.MEMORY_AL
                 if (m.low) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
             if (m.threshold > 0) InfoRow(stringResource(R.string.memory_low_below), Fmt.bytes(m.threshold.toDouble()))
             Sparkline(m.usedHistory.toList(), max = 1.0)
+            if (!apps.isNullOrEmpty()) {
+                for ((system, title) in listOf(false to R.string.cpu_top_apps, true to R.string.cpu_top_system)) {
+                    if (system && !shownApps.system) continue
+                    val rows = apps.filter { it.system == system }.take(RootCpu.EACH)
+                    if (rows.isEmpty()) continue
+                    MenuDivider()
+                    com.meridian11.books.bentobar.ui.SectionLabel(stringResource(title))
+                    rows.forEach { InfoRow(it.name, Fmt.bytes(it.bytes.toDouble())) }
+                }
+            }
             Spacer(Modifier.height(6.dp))
-            MenuNote(stringResource(R.string.memory_per_app_note))
+            MenuNote(stringResource(if (apps != null) R.string.memory_per_app_root_note else R.string.memory_per_app_note))
             MenuDivider()
             MenuEntry(Sym.APPS, stringResource(R.string.common_apps)) { host.close(); Env.launch(Intent(Settings.ACTION_APPLICATION_SETTINGS)) }
         }
+    }
+
+    override val options: @Composable (ItemConfig, (ItemConfig) -> Unit) -> Unit = { item, set ->
+        AppsShownRow(item, R.string.memory_show_apps, R.string.memory_show_apps_help, set)
     }
 }
 
@@ -123,7 +142,9 @@ object BatteryItem : ItemType("battery", R.string.item_battery_title, Sym.BOLT, 
             else -> Fmt.oneDecimal(kotlin.math.abs(b.watts)) + "W"
         }
         return ItemState(
-            icon = if (b.charging) Sym.BOLT else if (b.level < 0.1) Sym.BATTERY_0_BAR else Sym.BATTERY_FULL,
+            // Charging: the bolt in the charger's colour (green, blue for super fast), two of them for super fast 2.0.
+            icon = if (b.charging) b.speed.glyph else if (b.level < 0.1) Sym.BATTERY_0_BAR else Sym.BATTERY_FULL,
+            iconColor = if (b.charging) b.speed.color else null,
             filled = b.charging, text = text, active = belowLimit || hot, widthKey = "bat",
             tone = when { !b.charging && b.level < 0.1 -> Tone.ALERT; low || hot -> Tone.WARN; else -> Tone.NORMAL },
             desc = Env.str(R.string.battery_state_desc, Fmt.percent(b.level), b.statusText(), Fmt.oneDecimal(kotlin.math.abs(b.watts))),
@@ -133,17 +154,28 @@ object BatteryItem : ItemType("battery", R.string.item_battery_title, Sym.BOLT, 
     override val menu: @Composable (ItemConfig, MenuHost) -> Unit = { _, host ->
         rememberTick()
         val b = Env.battery
-        MenuCard(if (b.charging) Sym.BOLT else Sym.BATTERY_FULL, stringResource(R.string.battery_menu_title), "${Fmt.percent(b.level)} · ${b.statusText()}") {
-            Meter(b.level.toFloat(), if (!b.charging && b.level < 0.2) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+        // On a rooted device, the real cycle count and health percentage that the system keeps from apps.
+        androidx.compose.runtime.LaunchedEffect(Unit) { RootBattery.want() }
+        val root = RootBattery.info
+        MenuCard(if (b.charging) b.speed.glyph else Sym.BATTERY_FULL, stringResource(R.string.battery_menu_title), "${Fmt.percent(b.level)} · ${b.statusText()}") {
+            Meter(b.level.toFloat(), when (BatteryBand.of(b.level)) {
+                BatteryBand.FULL -> BatteryBand.GREEN
+                BatteryBand.LOW -> BatteryBand.ORANGE
+                BatteryBand.CRITICAL -> BatteryBand.RED
+            })
             InfoRow(stringResource(if (b.watts >= 0) R.string.battery_charging_at else R.string.battery_using), String.format(Locale.ROOT, "%.1f W", kotlin.math.abs(b.watts)))
             Sparkline(b.wattHistory.toList())
             InfoRow(stringResource(R.string.battery_power_source), b.sourceText())
+            if (b.plugged != 0) InfoRow(stringResource(R.string.battery_speed), stringResource(b.speed.words), b.speed.color)
             InfoRow(stringResource(R.string.battery_voltage), String.format(Locale.ROOT, "%.2f V", b.voltageMv / 1000.0))
             InfoRow(stringResource(R.string.battery_current), String.format(Locale.ROOT, "%d mA", kotlin.math.abs(b.currentUa) / 1000))
             InfoRow(stringResource(R.string.battery_temperature), String.format(Locale.ROOT, "%.1f °C", b.tempC),
                 if (b.tempC >= 42) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-            InfoRow(stringResource(R.string.battery_health), b.healthText())
-            if (b.cycles >= 0) InfoRow(stringResource(R.string.battery_cycles), b.cycles.toString())
+            InfoRow(stringResource(R.string.battery_health), root?.healthPct?.let { "$it% · ${b.healthText()}" } ?: b.healthText())
+            // Android's count, unless it says 0: some devices (a Samsung tablet months old) fill it with 0 and keep the real one to
+            // themselves, which root can read.
+            val cycles = root?.cycles ?: b.cycles.takeIf { it > 0 }
+            if (cycles != null) InfoRow(stringResource(R.string.battery_cycles), cycles.toString())
             if (b.chargeTimeMs > 0) InfoRow(stringResource(R.string.battery_full_in), Fmt.duration(b.chargeTimeMs))
             InfoRow(stringResource(R.string.battery_thermal_state), b.thermalText())
             MenuDivider()
@@ -189,5 +221,23 @@ object StorageItem : ItemType("storage", R.string.item_storage_title, Sym.HARD_D
             MenuEntry(Sym.HARD_DRIVE, stringResource(R.string.storage_settings)) { host.close(); Env.launch(Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)) }
             MenuEntry(Sym.DELETE, stringResource(R.string.storage_free_up)) { host.close(); Env.launch(Intent(StorageManager.ACTION_MANAGE_STORAGE)) }
         }
+    }
+}
+
+/** The battery bar's colour by level, as One UI's: green down to 20%, orange from 20% to 15%, red below 15%. */
+enum class BatteryBand {
+    FULL, LOW, CRITICAL;
+
+    companion object {
+        /** [level]: 0 to 1. */
+        fun of(level: Double): BatteryBand = when {
+            level < 0.15 -> CRITICAL
+            level < 0.20 -> LOW
+            else -> FULL
+        }
+        val GREEN = androidx.compose.ui.graphics.Color(0xFF3DB35B)
+        val ORANGE = androidx.compose.ui.graphics.Color(0xFFF59E0B)
+        /** A red that stays red in either theme (the theme's error colour is pink in dark). */
+        val RED = androidx.compose.ui.graphics.Color(0xFFE5484D)
     }
 }

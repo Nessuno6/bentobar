@@ -391,4 +391,34 @@ class ColorWatchTest {
         val gone = ColorWatch().also { it.pause(); it.owe(Cause.SLOW); it.clear(); it.resume(0, 250) }
         assertEquals(listOf(250L, 1_250L), Strip("a", gone).follow { "a" }.at)
     }
+
+    @Test fun aCheckWaitsForASeriesAndForTheLastScreenshot() {
+        val w = ColorWatch()
+        assertTrue(w.idle(0))                                  // nothing asked yet
+        w.cause(Cause.QUICK, 0, 250)
+        assertFalse(w.idle(100))                               // a series a cause asked for comes first
+        w.taken(250); w.read(260, Result.SAME)
+        w.taken(1_250); w.read(1_260, Result.SAME)
+        assertNull(w.due(1_300))
+        assertFalse(w.idle(1_250 + ColorWatch.CHECK_GAP_MS - 1)) // too soon after the last screenshot
+        assertTrue(w.idle(1_250 + ColorWatch.CHECK_GAP_MS))
+    }
+
+    @Test fun checksAreQuickWhileThingsMoveAndSlowOnceStill() {
+        assertEquals(ColorWatch.CHECK_FAST_MS, ColorWatch.checkEvery(0))
+        assertEquals(ColorWatch.CHECK_FAST_MS, ColorWatch.checkEvery(ColorWatch.ACTIVE_MS - 1))
+        assertEquals(ColorWatch.CHECK_CALM_MS, ColorWatch.checkEvery(ColorWatch.ACTIVE_MS))
+    }
+
+    @Test fun checksDoNotSpendTheBudgetOfCauses() {
+        // A minute of checks every second: a cause after them is read at once, as if none had been taken.
+        val w = ColorWatch()
+        for (t in 0L until 60_000L step 1_000L) w.taken(t, check = true)
+        w.cause(Cause.SLOW, 60_000, 250)
+        assertEquals(250L, w.due(60_000))
+        // A check still keeps a cause's first reading off its heels (Android refuses two within a third of a second).
+        w.taken(60_100, check = true)
+        w.cause(Cause.QUICK, 60_100, 0)
+        assertTrue(w.due(60_100)!! >= 400)
+    }
 }

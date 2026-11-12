@@ -5,6 +5,9 @@ import android.graphics.Typeface
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -15,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.Typeface as ComposeTypeface
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
 /** Fonts: the Material Symbols subset from assets, and the device's own UI families when present. */
@@ -71,8 +75,28 @@ fun SymIcon(
     color: Color = LocalContentColor.current,
     contentDescription: String? = null,
 ) {
+    // One UI's own icon where this build has one and "One UI icons" is on, sized and coloured as the glyph would be.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val oneUi = com.meridian11.books.bentobar.data.Store.config.collectAsState().value.oneUiIcons
+    val id = if (oneUi) OneUiIcons.drawable(context, sym) else 0
+    if (id != 0) {
+        val side = with(androidx.compose.ui.platform.LocalDensity.current) { size.toDp() }
+        val painter = androidx.compose.ui.res.painterResource(id)
+        // As tall as the glyph; as wide as the icon is (both earbuds side by side are wider than square).
+        val ratio = painter.intrinsicSize.let { if (it.height > 0f) it.width / it.height else 1f }
+        androidx.compose.material3.Icon(painter, contentDescription,
+            modifier.height(side).width(side * ratio).clearAndSetSemantics { if (contentDescription != null) this.contentDescription = contentDescription }, tint = color)
+        return
+    }
     Text(
-        text = sym,
+        // A charging device's glyph without One UI's icon for it: the bolt says it.
+        // The double bolt without One UI's icon: two bolts, drawn close.
+        text = when {
+            sym == com.meridian11.books.bentobar.items.ChargeSpeed.DOUBLE_BOLT ||
+                sym.endsWith(com.meridian11.books.bentobar.items.DevicesRules.CHARGING_2) -> Sym.BOLT + Sym.BOLT
+            sym.endsWith(com.meridian11.books.bentobar.items.DevicesRules.CHARGING) -> Sym.BOLT
+            else -> sym
+        },
         modifier = modifier.clearAndSetSemantics { if (contentDescription != null) this.contentDescription = contentDescription },
         color = color,
         style = TextStyle(
@@ -80,6 +104,8 @@ fun SymIcon(
             fontSize = size,
             lineHeight = size,
             textAlign = TextAlign.Center,
+            letterSpacing = if (sym == com.meridian11.books.bentobar.items.ChargeSpeed.DOUBLE_BOLT ||
+                sym.endsWith(com.meridian11.books.bentobar.items.DevicesRules.CHARGING_2)) (-0.4).em else TextUnit.Unspecified,
         ),
         maxLines = 1,
     )

@@ -63,6 +63,11 @@ ICONS += """
 show_chart trending_down trending_up
 """.split()
 
+# Added for Device batteries' link: the phone or tablet whose batteries are shown here.
+ICONS += """
+smartphone tablet_android
+""".split()
+
 # Symbols also exported as vector drawables (tiles, notifications, launcher icon), from the filled font.
 DRAWABLES = ["coffee", "timer", "avg_pace", "event", "pause", "play_arrow", "add", "stop", "videocam", "open_in_new"]
 

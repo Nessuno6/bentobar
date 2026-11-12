@@ -19,8 +19,19 @@ enum class Display {
 @Serializable
 enum class Position { RIGHT, CENTER, LEFT }
 
+/** Which displays show BentoBar: the device's own screen in its status bar, other displays in their taskbar, or all. */
 @Serializable
-enum class ColorMode { AUTO, LIGHT, DARK }
+enum class Screens { ALL, MAIN, OTHER }
+
+@Serializable
+enum class ColorMode {
+    AUTO, LIGHT, DARK,
+    /** The status bar is read as for [AUTO], and the strip takes the other of light and dark. */
+    OPPOSITE;
+
+    /** Whether the status bar is read (screenshots of its window) in this mode. */
+    val reads get() = this == AUTO || this == OPPOSITE
+}
 
 @Serializable
 enum class TextSize { SMALL, DEFAULT, LARGE }
@@ -82,6 +93,7 @@ data class BarConfig(
     val enabled: Boolean = true,
     val items: List<ItemConfig> = emptyList(),
     val position: Position = Position.RIGHT,
+    val screens: Screens = Screens.ALL,
     /** How the Hidden section works (version 3). */
     val hiddenMode: HiddenMode = HiddenMode.SHOW_ALL,
     /** Before version 3: show the ‹ button. Read only by [migrateToV3]. */
@@ -99,6 +111,20 @@ data class BarConfig(
     val textSize: TextSize = TextSize.DEFAULT,
     val pill: Pill = Pill.NONE,
     val color: ColorMode = ColorMode.AUTO,
+    /**
+     * "Keep checking the status bar": with a colour that reads the bar, read it every couple of seconds while the
+     * strip shows, so a bar that changes its colours with no event (an app's page turning dark) is followed.
+     */
+    val keepChecking: Boolean = true,
+    /**
+     * "Popup glass", where popups have Samsung's blur: 50 is Samsung's Quick Settings glass as it is (light text);
+     * toward 0 a milkier light glass with dark text, toward 100 a deeper dark one.
+     */
+    val glassTone: Int = 50,
+    /** "Popup text follows the status bar": the glass is light or dark as the bar's text is; [glassTone] then sets only how much. */
+    val glassFollowsBar: Boolean = true,
+    /** "One UI icons": where this build has One UI's own icons (util/OneUiIcons), they replace the Material ones. */
+    val oneUiIcons: Boolean = true,
     /** Space between items in dp (12 matches the system icons' rhythm on the desktop bar). */
     val spacing: Int = 12,
     /** With a popup open, pointing at another item opens its popup, as in a menu bar. Off: nothing opens on hover by itself. */

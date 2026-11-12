@@ -76,6 +76,35 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
     question at a time (a search). Both are pure Kotlin; `items/Background.kt` wires them to the app.
     `state()` calls `want(key)` and reads `peek(key)`: nothing is scheduled, so nothing loads while
     no item is sampled.
+  - `items/DevicesProvider.kt`: Device batteries for other apps, read only (`content://com.meridian11.books.bentobar.devices/devices`
+    and `/cases`), behind the one permission BentoBar defines (dangerous: granted by the user app by app) and the
+    install's own switch (`data/Sharing.kt`, in the no-backup directory like `Online.kt`). Its columns are a promise
+    to other apps' code (`DevicesShareRules`, pure and pinned by its test): add columns, never rename or drop one.
+    A query reads the devices anew when the last reading is over 10 s old (`DevicesItem.forOtherApps`), and watchers
+    are told when the rows change.
+  - `items/ItemsProvider.kt`: the bar's items for other apps, read only (`content://com.meridian11.books.bentobar.items/items`),
+    behind a permission of its own (dangerous too) and a switch of its own in `data/Sharing.kt` (Look, "Other apps").
+    One row an item the bar shows now: its words, tone and icon as a PNG (`ItemsShareRules`, pure and pinned by its
+    test: add columns, never rename or drop one). Nothing is sampled for a query; the `Ticker` tells watchers when
+    the rows' words changed. One request beside the table, `call("open", id, rect)`: what a click on that item does,
+    its popup under the caller's own rectangle on screen (`BarController.openAt`), behind the same two locks. And
+    `call("claim", hide=[ids], watch)`: the caller shows those items itself, so the strip leaves them out and they stay
+    sampled (`items/Claims.kt`, a two-minute lease the caller renews; switching sharing off ends it); `watch` while it
+    lists every item, so all outside Off are sampled and shared, each with `in_bar`; `whole` while it shows the bar's
+    items itself, so the strip draws nothing, ‹ included (the bar keeps sampling: an empty strip still counts as shown).
+  - `widget/`: the home screen widget. `WidgetRules` (pure, unit-tested): its devices (this one, Device batteries',
+    the linked side's and the cases), their order, which goes in which cell, the grids and the arc's colour.
+    `Widgets.kt`: the providers (4 x 2, one to four, custom), `WidgetUpdater` (a background thread: reading may wait for
+    Bluetooth or root; told by `DevicesProvider.read` and `Link` when something changed, and it keeps the linked side for
+    two minutes across a dropped link) and `WidgetJob` (every 15 minutes, not persisted: no boot permission). `WidgetArc`
+    draws a cell (One UI's icon where the build has it, else the filled Material Symbol; the case's is
+    `oneui_headphones_case`, a local file like the other `oneui_*`). `WidgetStore` keeps the cells, order and switches;
+    `WidgetSettingsActivity` is the launcher's settings screen for one widget.
+    A cell is two layers: the track, icon and level drawn white and tinted black or white (night variants, so the launcher
+    follows dark mode with no new drawing), and the coloured arc above. That arc is drawn in Display P3 with One UI's own
+    green as P3 values (#83C85D shading to #58BF6F over the arc's first 120°, read from its widget's pixels): the same
+    values in an sRGB bitmap came out duller on a Samsung screen (#58BF6F showed as #73BD77). Charging keeps the green;
+    a green dot marks each earbud charging in its case, as One UI does.
   - `items/NowPlaying.kt`: the media players' sessions as one immutable value, for the Now playing
     item, alive only while such an item is. `items/MediaAccess.kt` is the entry in Android's
     "Notification access" list that Android wants for it: it asks for no notification type and is

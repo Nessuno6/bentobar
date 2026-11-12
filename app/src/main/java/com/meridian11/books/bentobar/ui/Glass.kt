@@ -57,6 +57,13 @@ class MenuGlassState {
     var clockMs by mutableFloatStateOf(0f)
     /** The platform blurs behind windows now (not in battery saver): glass; otherwise a solid card. */
     var blur by mutableStateOf(true)
+    /**
+     * The blur is Samsung's own (a One UI tablet, where Android's is off for apps): the card then looks like its
+     * Quick Settings, dark frosted glass with light text and no rim, whatever the theme.
+     */
+    var samsung by mutableStateOf(false)
+    /** The card stands on a bar at the bottom of the screen (a desktop taskbar): it unfolds up from its bottom edge. */
+    var fromBottom = false
     /** The card's whole height, in px, once it has been measured (0 before); the shadow's window sizes itself by it. */
     var fullHeightPx by androidx.compose.runtime.mutableIntStateOf(0)
 
@@ -70,6 +77,9 @@ class MenuGlassState {
     /** Blocks with parts of their own: they only drop, and their parts fade or pop themselves. */
     internal val withParts = HashSet<Int>()
     internal var lastStartMs = 0f
+
+    /** Block [b] of [count] in the order they arrive: from the top down, or from the bottom up on a card that rises. */
+    internal fun turn(b: Int, count: Int) = if (fromBottom) count - 1 - b else b
 }
 
 /** The popup whose contents are being laid out, for its blocks to drop into place on its clock (none: no entrance). */
@@ -117,8 +127,9 @@ fun DropColumn(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
             placeables.forEachIndexed { i, p ->
                 if (glass == null) p.place(0, y)
                 else p.placeWithLayer(0, y) {
-                    val b = MenuMotion.block(blocks[i], glass.clockMs, count)
-                    translationY = b.dy * drop
+                    val b = MenuMotion.block(glass.turn(blocks[i], count), glass.clockMs, count)
+                    // Standing on a taskbar, the blocks rise into place as the glass does.
+                    translationY = b.dy * drop * (if (glass.fromBottom) -1f else 1f)
                     // A block whose parts arrive on their own only drops: they fade or pop in themselves.
                     alpha = if (blocks[i] in glass.withParts) 1f else b.alpha
                 }
@@ -128,11 +139,15 @@ fun DropColumn(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     }
 }
 
-/** The glass's shape as far as it shows: the card's top [heightPx] px, its corners never more than half its height. */
-class ShownGlass(private val heightPx: Float, private val cornerPx: Float) : Shape {
+/**
+ * The glass's shape as far as it shows: the card's top [heightPx] px ([fromBottom]: its bottom ones), its corners never
+ * more than half its height.
+ */
+class ShownGlass(private val heightPx: Float, private val cornerPx: Float, private val fromBottom: Boolean = false) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val h = min(heightPx, size.height)
-        return Outline.Rounded(RoundRect(0f, 0f, size.width, h, CornerRadius(min(cornerPx, h / 2f))))
+        val top = if (fromBottom) size.height - h else 0f
+        return Outline.Rounded(RoundRect(0f, top, size.width, top + h, CornerRadius(min(cornerPx, h / 2f))))
     }
 }
 
@@ -150,18 +165,26 @@ fun Modifier.menuShadow(glass: MenuGlassState, dark: Boolean): Modifier = this.t
         if (strength <= 0f) return@drawBehind
         val h = min(glass.heightDp.dp.toPx(), size.height)
         val r = min(MenuMotion.RADIUS_DP.dp.toPx(), h / 2f)
-        val card = Path().apply { addRoundRect(RoundRect(0f, 0f, size.width, h, CornerRadius(r))) }
+        val t = if (glass.fromBottom) size.height - h else 0f
+        val card = Path().apply { addRoundRect(RoundRect(0f, t, size.width, t + h, CornerRadius(r))) }
+        // Standing on a taskbar, nothing of the shadow below the card's bottom edge: its blur reached down across the few
+        // pixels to the bar and was cut off at the bar's edge, a dark line there that came and went as the card moved.
+        val floor = if (glass.fromBottom) size.height else Float.MAX_VALUE / 4
+        clipRect(-size.width, -Float.MAX_VALUE / 4, 2 * size.width, floor) {
         clipPath(card, ClipOp.Difference) {
             drawIntoCanvas { c ->
-                // Key: y 7, blur σ 9, spread −4; contact: y 1, σ 1. Black at 0.12 / 0.04 light, 0.20 / 0.07 dark.
+                // Key: y 7, blur σ 9, spread −4; contact: y 1, σ 1. Black at 0.12 / 0.04 light, 0.20 / 0.07 dark. On a card
+                // standing on a taskbar, mirrored as the card is: it falls up, away from the bar, not onto it.
                 val key = Shadows.paint(this, sigmaDp = 9f, alpha = (if (dark) 0.20f else 0.12f) * strength)
                 val inset = 4.dp.toPx()
-                val y = 7.dp.toPx()
-                c.nativeCanvas.drawRoundRect(inset, y + inset, size.width - inset, h + y - inset, r - inset, r - inset, key)
+                val up = if (glass.fromBottom) -1f else 1f
+                val y = 7.dp.toPx() * up
+                c.nativeCanvas.drawRoundRect(inset, t + y + inset, size.width - inset, t + h + y - inset, r - inset, r - inset, key)
                 val contact = Shadows.paint(this, sigmaDp = 1f, alpha = (if (dark) 0.07f else 0.04f) * strength)
-                val y1 = 1.dp.toPx()
-                c.nativeCanvas.drawRoundRect(0f, y1, size.width, h + y1, r, r, contact)
+                val y1 = 1.dp.toPx() * up
+                c.nativeCanvas.drawRoundRect(0f, t + y1, size.width, t + h + y1, r, r, contact)
             }
+        }
         }
     },
 )
@@ -174,12 +197,13 @@ fun Modifier.menuGlass(glass: MenuGlassState, look: GlassLook): Modifier = this.
         val h = min(glass.heightDp.dp.toPx(), size.height)
         val r = min(MenuMotion.RADIUS_DP.dp.toPx(), h / 2f)
         val px = 1f
-        drawRoundRect(look.veil.copy(alpha = look.veil.alpha * p), size = Size(size.width, h), cornerRadius = CornerRadius(r))
+        val t = if (glass.fromBottom) size.height - h else 0f
+        drawRoundRect(look.veil.copy(alpha = look.veil.alpha * p), topLeft = Offset(0f, t), size = Size(size.width, h), cornerRadius = CornerRadius(r))
         // The hairline in the outermost pixel, the rim just inside it.
-        drawRoundRect(look.hairline.copy(alpha = look.hairline.alpha * p), topLeft = Offset(px / 2, px / 2),
+        drawRoundRect(look.hairline.copy(alpha = look.hairline.alpha * p), topLeft = Offset(px / 2, t + px / 2),
             size = Size(size.width - px, h - px), cornerRadius = CornerRadius(r - px / 2), style = Stroke(px))
         val rim = 1.dp.toPx()
-        drawRoundRect(look.rim.copy(alpha = look.rim.alpha * p), topLeft = Offset(px + rim / 2, px + rim / 2),
+        drawRoundRect(look.rim.copy(alpha = look.rim.alpha * p), topLeft = Offset(px + rim / 2, t + px + rim / 2),
             size = Size(size.width - 2 * px - rim, h - 2 * px - rim), cornerRadius = CornerRadius(r - px - rim / 2), style = Stroke(rim))
     },
 )
@@ -226,7 +250,7 @@ class Part internal constructor(private val glass: MenuGlassState, private val o
         block = b
         below = glass.fullHeightPx > 0 && mid > glass.fullHeightPx
         glass.withParts += b
-        glass.lastStartMs = maxOf(glass.lastStartMs, MenuMotion.blockStartMs(b, tops.size) + offsetMs)
+        glass.lastStartMs = maxOf(glass.lastStartMs, MenuMotion.blockStartMs(glass.turn(b, tops.size), tops.size) + offsetMs)
     }
 
     /** Ms since this part's start: negative before it, infinite once the popup rests (or "No animations"). */
@@ -235,7 +259,8 @@ class Part internal constructor(private val glass: MenuGlassState, private val o
         if (clock.isInfinite() || below) return Float.POSITIVE_INFINITY
         if (block < 0) resolve()
         val b = block.coerceAtLeast(0)
-        return clock - MenuMotion.partStartMs(b, glass.blockTops.size.coerceAtLeast(1), offsetMs + plus, glass.lastStartMs)
+        val count = glass.blockTops.size.coerceAtLeast(1)
+        return clock - MenuMotion.partStartMs(glass.turn(b, count), count, offsetMs + plus, glass.lastStartMs)
     }
 }
 

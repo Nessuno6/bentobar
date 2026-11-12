@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The bar's items for other apps (items/ItemsProvider). -->
+    <string name="share_label">Other apps</string>
+    <string name="share_items">Share the bar\'s items with other apps</string>
+    <string name="share_items_help">Lets apps you allow read what the bar shows: each item\'s icon and words, which can be a track\'s title or a meeting\'s name. Each app still asks Android for your permission first. Applies to this device, not to one layout.</string>
+    <string name="share_items_permission_label">read the bar\'s items from BentoBar</string>
+    <string name="share_items_permission_desc">Read what BentoBar\'s bar shows, each item\'s icon and words, while BentoBar\'s sharing is on.</string>
+</resources>

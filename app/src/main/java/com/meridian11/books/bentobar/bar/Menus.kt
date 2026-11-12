@@ -63,9 +63,16 @@ import com.meridian11.books.bentobar.util.Sym
  */
 @Composable
 fun MenuSurface(width: Dp, maxHeight: Dp, glass: MenuGlassState?, content: @Composable () -> Unit) {
-    BentoBarTheme {
+    // On Samsung's glass, "Popup glass" says light or dark, whatever the theme: dark glass has light text.
+    // Following the status bar: the slider's distance from the middle, on the bar's side (light text on a dark bar).
+    val cfg = Store.config.collectAsState().value
+    val barDark = BarLook.current.collectAsState().value?.barDark
+    val tone = SemBlur.toneFor(cfg.glassTone, if (cfg.glassFollowsBar) barDark else null)
+    val samsungDark = glass?.samsung == true && com.meridian11.books.bentobar.bar.SemBlur.dark(tone)
+    val samsungLight = glass?.samsung == true && !samsungDark
+    BentoBarTheme(dark = (isSystemInDarkTheme() || samsungDark) && !samsungLight) {
         val g = glass ?: remember { MenuGlassState().apply { presence = 1f; shadow = 1f; clockMs = Float.POSITIVE_INFINITY; heightDp = Float.MAX_VALUE } }
-        val dark = isSystemInDarkTheme()
+        val dark = (isSystemInDarkTheme() || samsungDark) && !samsungLight
         val scheme = MaterialTheme.colorScheme
         // "Tint with system colors" (visual.md §6): the veil, or the solid card, takes half of the palette's secondary
         // container (onSecondary in dark theme): a tint, not a wash, and 0.04 more of it so text stays as readable.
@@ -74,12 +81,14 @@ fun MenuSurface(width: Dp, maxHeight: Dp, glass: MenuGlassState?, content: @Comp
         val look = GlassLook(
             veil = when {
                 g.blur && tint -> lerp(scheme.surfaceContainerLowest, hue, 0.5f).copy(alpha = if (dark) 0.66f else 0.60f)
+                g.samsung -> scheme.surfaceContainerLowest.copy(alpha = com.meridian11.books.bentobar.bar.SemBlur.veilAt(tone))
                 g.blur -> scheme.surfaceContainerLowest.copy(alpha = if (dark) 0.62f else 0.56f)
                 tint -> lerp(scheme.surfaceContainerHigh, hue, 0.5f)
                 else -> scheme.surfaceContainerHigh
             },
-            rim = Color.White.copy(alpha = if (dark) 0.44f else 0.80f),
-            hairline = Color.Black.copy(alpha = if (dark) 0.28f else 0.20f),
+            // Samsung's glass has no rim or hairline of its own: none here either.
+            rim = if (g.samsung) Color.Transparent else Color.White.copy(alpha = if (dark) 0.44f else 0.80f),
+            hairline = if (g.samsung) Color.Transparent else Color.Black.copy(alpha = if (dark) 0.28f else 0.20f),
             dark = dark,
         )
         val density = LocalDensity.current.density
@@ -95,7 +104,7 @@ fun MenuSurface(width: Dp, maxHeight: Dp, glass: MenuGlassState?, content: @Comp
                     .graphicsLayer {
                         alpha = g.alpha
                         clip = true
-                        shape = ShownGlass(g.heightDp * density, MenuMotion.RADIUS_DP * density)
+                        shape = ShownGlass(g.heightDp * density, MenuMotion.RADIUS_DP * density, g.fromBottom)
                     }
                     .menuGlass(g, look),
             ) {
@@ -131,7 +140,10 @@ fun MenuSurface(width: Dp, maxHeight: Dp, glass: MenuGlassState?, content: @Comp
 fun MenuShadow(width: Dp, glass: MenuGlassState) {
     val dark = isSystemInDarkTheme()
     val density = LocalDensity.current.density
-    Box(Modifier.padding(start = MenuRoom.side, end = MenuRoom.side, top = MenuRoom.top, bottom = MenuRoom.bottom)) {
+    // Standing on a taskbar the room is mirrored too: the shadow's room above the card, the gap to the bar below it.
+    val above = if (glass.fromBottom) MenuRoom.bottom else MenuRoom.top
+    val below = if (glass.fromBottom) MenuRoom.top else MenuRoom.bottom
+    Box(Modifier.padding(start = MenuRoom.side, end = MenuRoom.side, top = above, bottom = below)) {
         Box(Modifier.width(width).height((glass.fullHeightPx / density).dp).menuShadow(glass, dark))
     }
 }
@@ -189,11 +201,12 @@ fun ItemContextMenu(itemId: String, host: MenuHost, openMenu: () -> Unit) {
  * any item's menu.
  */
 @Composable
-fun BentoBarMenu(host: MenuHost, openItem: (ItemConfig) -> Unit, hideBar: () -> Unit, everything: Boolean = false) {
+fun BentoBarMenu(host: MenuHost, openItem: (ItemConfig) -> Unit, hideBar: () -> Unit, everything: Boolean = false,
+    overflowIds: kotlinx.coroutines.flow.StateFlow<Set<String>> = com.meridian11.books.bentobar.bar.BarOverflow.ids) {
     val states by Ticker.states.collectAsState()
     // Worked out here, not when the menu opened, so an item popping out (or in) updates the list.
     val cfg by Store.config.collectAsState()
-    val overflow by com.meridian11.books.bentobar.bar.BarOverflow.ids.collectAsState()
+    val overflow by overflowIds.collectAsState()
     val hidden = if (everything) cfg.items.filter { it.section != Section.OFF }
     else cfg.notDrawn { states[it.id]?.active == true }.let { waiting -> cfg.items.filter { it in waiting || it.id in overflow } }
     val first = remember { androidx.compose.ui.focus.FocusRequester() }

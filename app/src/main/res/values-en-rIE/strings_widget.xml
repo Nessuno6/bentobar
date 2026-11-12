@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- British English for strings_widget.xml: only the strings whose spelling differs from the US default. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="widget_text">Text colour</string>
+</resources>

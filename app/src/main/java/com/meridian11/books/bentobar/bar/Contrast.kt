@@ -59,4 +59,11 @@ object Contrast {
         val back = bg ?: if (dark) Color.Black else Color.White
         return LiveLook(orElse(text, back, readableOn(back)), back, dark, bg != null)
     }
+
+    /**
+     * "Opposite of the status bar": near-black where [matched] (the look Match would give) is on a dark bar,
+     * white where it is on a light one. The bar's own colour is dropped: text the other way round from an
+     * opaque bar would not read on it, and [resolve] would turn it back.
+     */
+    fun opposite(matched: LiveLook): LiveLook = resolve(if (matched.barDark) DARK_TEXT else Color.White, null)
 }

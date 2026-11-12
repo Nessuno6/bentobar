@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Device batteries on the home screen.** A widget with an arc for each device: this one, what Device batteries finds,
+  and, while linked, the other phone or tablet and its devices, plus the earbuds' cases as last seen. 4 x 2, one to four
+  devices in a row (a column when resized tall) or a custom grid; in its settings, pin a device to a cell and set the
+  order the others fill in. Green while charging, as One UI draws it, with a dot under each earbud charging in its case; red from
+  15% down.
+- **Device batteries for other apps.** With *Share with other apps* on in Device batteries' settings (off by
+  default), apps you grant the new permission *read device batteries from BentoBar* can read each device's kind,
+  name, level and charging, which earbuds are out, and the cases as last seen. Read only, on the device; see
+  "Device batteries in your app" in the README.
+
 ## 1.7.1 (2026-11-03)
 
 - **About, Setup and Add name every online item.** They said three items go online; five do (Weather, Air quality &

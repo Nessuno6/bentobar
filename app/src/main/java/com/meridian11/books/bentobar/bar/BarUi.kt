@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -183,6 +184,8 @@ private const val LONG_PRESS_MS = 550L
  * without one it places the window that much further out, so the items stay where they were.
  */
 val STRIP_PILL_PADDING = 6.dp
+/** The pill's inset from the strip's top and bottom edges. */
+val STRIP_PILL_INSET = 3.dp
 
 @androidx.compose.runtime.Immutable
 data class StripEntry(val item: ItemConfig, val state: ItemState)
@@ -302,7 +305,7 @@ fun Strip(
                     }
                 }
             }
-            .padding(vertical = 3.dp)
+            .padding(vertical = STRIP_PILL_INSET)
             .clip(RoundedCornerShape(50))
             .background(pillBg)
             // Over the strip's own pill and under every item (an alert's red capsule is drawn over it). Its place is
@@ -648,7 +651,7 @@ private fun ItemView(entry: StripEntry, look: StripLook, events: StripEvents, gl
             } else if (s.dayNumber != null) {
                 DayBadge(s.dayNumber, look.iconSp, color, look.background)
             } else if (s.icon != null && s.icon.isNotEmpty()) {
-                SymIcon(s.icon, size = look.iconSp, filled = s.filled, color = color)
+                SymIcon(s.icon, size = look.iconSp, filled = s.filled, color = s.iconColor?.takeIf { s.tone == Tone.NORMAL } ?: color)
             }
         }
         if (showIcon && (showText || slider != null) && (s.image != null || !s.icon.isNullOrEmpty())) Spacer(Modifier.width(5.dp))
@@ -940,11 +943,14 @@ fun MeasuredStrip(bias: Float, onWidth: (Int) -> Unit, content: @Composable () -
 /** A strip item's tooltip: dark, high-contrast (white on #303134 is over 12:1) on any bar. */
 @Composable
 fun Tooltip(label: String) {
-    Box(Modifier.fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(Color(0xF0303134)).padding(horizontal = 10.dp),
-        contentAlignment = Alignment.Center) {
-        Text(label, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    // On a popup's glass ([MenuSurface]), in its text colour.
+    Box(Modifier.fillMaxWidth().height(TOOLTIP_HEIGHT).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+        Text(label, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
+
+/** A tooltip's height: one line. */
+val TOOLTIP_HEIGHT = 28.dp
 
 /**
  * Today's day number as a small filled date badge, the size of a status bar icon: the number is cut

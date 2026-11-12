@@ -11,6 +11,10 @@ object BarPixels {
     /** Fewer opaque pixels than this is no reading: an empty box, or a bar caught while it fades in. */
     private const val MIN_OPAQUE = 12
     private const val OPAQUE_ALPHA = 230
+    /** A translucent glyph's alpha at least (a light bar's dark icons are black at about 60%, alpha 153). */
+    private const val INK_ALPHA = 96
+    /** Below this alpha a pixel is the bar's clear background. */
+    private const val CLEAR_ALPHA = 16
     /** Summed channel difference from the background below which nothing in the box counts as text. */
     private const val MIN_TEXT_DISTANCE = 60
 
@@ -29,7 +33,7 @@ object BarPixels {
         if (width <= 0 || px.isEmpty()) return null
         val height = px.size / width
         val opaque = px.filter { (it ushr 24) >= OPAQUE_ALPHA }
-        if (opaque.size < MIN_OPAQUE) return null
+        if (opaque.size < MIN_OPAQUE) return translucentInk(px)
         if (opaque.size < px.size * 0.8) return BarColors(average(opaque), null)
 
         val edge = ArrayList<Int>()
@@ -41,6 +45,19 @@ object BarPixels {
         if (far < MIN_TEXT_DISTANCE) return BarColors(null, color(bg)) // nothing readable in the box
         val glyphs = opaque.filter { distance(it, bg) >= far * 0.6 }.sortedByDescending { distance(it, bg) }
         return BarColors(average(glyphs.take(maxOf(8, glyphs.size / 5))), color(bg))
+    }
+
+    /**
+     * Dark glyphs on a see-through bar: Android draws a light bar's dark icons and clock as translucent black (about
+     * 60%), where its white ones are opaque, so none of them counts as opaque. Read only when everything else in the
+     * box is clear: a whole bar caught fading in is translucent all over, and that is still no reading. The pixels
+     * come unpremultiplied, so a translucent glyph's colour is its own.
+     */
+    private fun translucentInk(px: IntArray): BarColors? {
+        if (px.count { (it ushr 24) < CLEAR_ALPHA } < px.size * 0.6) return null
+        val ink = px.filter { (it ushr 24) >= INK_ALPHA }
+        if (ink.size < MIN_OPAQUE) return null
+        return BarColors(average(ink.sortedByDescending { it ushr 24 }.take(maxOf(8, ink.size / 3))), null)
     }
 
     /** The commonest colour of [px], as RGB: colours are grouped 16 levels to a channel, so a dithered or slightly graded background still counts as one. */

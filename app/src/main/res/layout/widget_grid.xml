@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home screen widget (widget/Widgets.kt): up to 4 x 4 cells; the rows and cells a widget doesn't use are hidden.
+     Each cell is two drawn layers: widget_fg (the track, the icon and the level, drawn white and tinted black or white,
+     by the night mode where the user follows it) and widget_arc above it (the level's coloured arc). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="4dp">
+
+    <LinearLayout
+        android:id="@+id/widget_row0"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/widget_cell0"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg0"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc0"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell1"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg1"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc1"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell2"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg2"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc2"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell3"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg3"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc3"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_row1"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/widget_cell4"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg4"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc4"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell5"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg5"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc5"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell6"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg6"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc6"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell7"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg7"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc7"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_row2"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/widget_cell8"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg8"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc8"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell9"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg9"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc9"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell10"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg10"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc10"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell11"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg11"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc11"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_row3"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/widget_cell12"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg12"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc12"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell13"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg13"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc13"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell14"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg14"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc14"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/widget_cell15"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/widget_fg15"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+
+            <ImageView
+                android:id="@+id/widget_arc15"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

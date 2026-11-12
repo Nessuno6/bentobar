@@ -166,6 +166,11 @@ fun LookPage() {
         ChoiceRow(stringResource(R.string.look_position), listOf(Position.RIGHT to stringResource(R.string.look_position_right),
             Position.CENTER to stringResource(R.string.look_position_center), Position.LEFT to stringResource(R.string.look_position_left)),
             cfg.position) { p -> Store.update { it.copy(position = p) } }
+        ChoiceRow(stringResource(R.string.look_screens), listOf(
+            com.meridian11.books.bentobar.data.Screens.ALL to stringResource(R.string.look_screens_all),
+            com.meridian11.books.bentobar.data.Screens.MAIN to stringResource(R.string.look_screens_main),
+            com.meridian11.books.bentobar.data.Screens.OTHER to stringResource(R.string.look_screens_other)),
+            cfg.screens, help = stringResource(R.string.look_screens_help)) { v -> Store.update { it.copy(screens = v) } }
         SliderRow(stringResource(R.string.look_spacing), cfg.spacing, 0..24, { "$it dp" }) { v -> Store.update { it.copy(spacing = v) } }
         SwitchRow(stringResource(R.string.look_presenting), cfg.presenting, help = stringResource(R.string.look_presenting_help)) { on ->
             Store.update { it.copy(presenting = on) }
@@ -176,8 +181,28 @@ fun LookPage() {
             Store.update { it.copy(textSize = v) }
         }
         ChoiceRow(stringResource(R.string.look_color), listOf(ColorMode.AUTO to stringResource(R.string.look_color_auto),
+            ColorMode.OPPOSITE to stringResource(R.string.look_color_opposite),
             ColorMode.LIGHT to stringResource(R.string.look_color_light), ColorMode.DARK to stringResource(R.string.look_color_dark)), cfg.color,
             help = stringResource(R.string.look_color_help)) { v -> Store.update { it.copy(color = v) } }
+        if (cfg.color.reads) SwitchRow(stringResource(R.string.look_keep_checking), cfg.keepChecking,
+            help = stringResource(R.string.look_keep_checking_help)) { on -> Store.update { it.copy(keepChecking = on) } }
+        // Only where popups have Samsung's blur (a One UI tablet): how light or dark their glass is.
+        if (com.meridian11.books.bentobar.bar.SemBlur.available) {
+            val light = stringResource(R.string.look_glass_tone_light); val dark = stringResource(R.string.look_glass_tone_dark)
+            val qs = stringResource(R.string.look_glass_tone_qs)
+            SliderRow(stringResource(R.string.look_glass_tone), cfg.glassTone, 0..100,
+                { when { it == 50 -> qs; it < 50 -> "$light $it"; else -> "$dark $it" } }) { v ->
+                Store.update { it.copy(glassTone = v) }
+            }
+            SwitchRow(stringResource(R.string.look_glass_follow), cfg.glassFollowsBar, help = stringResource(R.string.look_glass_follow_help)) { on ->
+                Store.update { it.copy(glassFollowsBar = on) }
+            }
+        }
+        // Only in a build with One UI's icons (tools/oneui_icons.py).
+        if (com.meridian11.books.bentobar.util.OneUiIcons.available(androidx.compose.ui.platform.LocalContext.current))
+            SwitchRow(stringResource(R.string.look_oneui_icons), cfg.oneUiIcons, help = stringResource(R.string.look_oneui_icons_help)) { on ->
+                Store.update { it.copy(oneUiIcons = on) }
+            }
         ChoiceRow(stringResource(R.string.look_background), listOf(Pill.NONE to stringResource(R.string.look_pill_none),
             Pill.SUBTLE to stringResource(R.string.look_pill_subtle), Pill.SOLID to stringResource(R.string.look_pill_solid)), cfg.pill) { v ->
             Store.update { it.copy(pill = v) }
@@ -190,6 +215,12 @@ fun LookPage() {
         }
         SwitchRow(stringResource(R.string.look_system_tint), cfg.systemTint, help = stringResource(R.string.look_system_tint_help)) { on ->
             Store.update { it.copy(systemTint = on) }
+        }
+        // For this install, not this layout: the switch is kept outside the layout (data/Sharing).
+        PageLabel(stringResource(R.string.share_label))
+        val sharingItems by com.meridian11.books.bentobar.data.Sharing.items.collectAsState()
+        SwitchRow(stringResource(R.string.share_items), sharingItems, help = stringResource(R.string.share_items_help)) { on ->
+            com.meridian11.books.bentobar.data.Sharing.setItems(on)
         }
         PageLabel(stringResource(R.string.barmenu_hidden_items))
         ChoiceRow(stringResource(R.string.look_hidden_mode), listOf(HiddenMode.SHOW_ALL to stringResource(R.string.look_hidden_show_all),

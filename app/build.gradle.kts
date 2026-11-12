@@ -68,5 +68,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    // Device batteries' link between two of the user's devices (items/Link): Google's Cross device SDK (developer preview).
+    implementation("com.google.ambient.crossdevice:crossdevice:0.1.0-preview01")
+    implementation("com.google.android.gms:play-services-dtdi:16.0.0-beta01")
     testImplementation("junit:junit:4.13.2")
 }

@@ -75,8 +75,8 @@ class ImportTest {
         // What Copy settings puts on the clipboard, and what a backup carries: these fields and no others. A key and
         // the three online switches are kept elsewhere (Online); a new field here should be a decision, so it is listed.
         val fields = (0 until BarConfig.serializer().descriptor.elementsCount).map { BarConfig.serializer().descriptor.getElementName(it) }.toSet()
-        assertEquals(setOf("version", "enabled", "items", "position", "hiddenMode", "chevron", "revealOnHover", "autoCollapseSec", "pinnedOpen",
-            "presenting", "turnedOff", "textSize", "pill", "color", "spacing", "hoverSwitchesPopups", "noAnimations", "systemTint", "chipMode", "onboarded", "cities"), fields)
+        assertEquals(setOf("version", "enabled", "items", "position", "screens", "hiddenMode", "chevron", "revealOnHover", "autoCollapseSec", "pinnedOpen",
+            "presenting", "turnedOff", "textSize", "pill", "color", "keepChecking", "glassTone", "glassFollowsBar", "oneUiIcons", "spacing", "hoverSwitchesPopups", "noAnimations", "systemTint", "chipMode", "onboarded", "cities"), fields)
         val item = (0 until ItemConfig.serializer().descriptor.elementsCount).map { ItemConfig.serializer().descriptor.getElementName(it) }.toSet()
         assertEquals(setOf("id", "type", "section", "whenActive", "display", "options"), item)
     }

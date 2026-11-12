@@ -2,11 +2,13 @@
 <!-- Device batteries. Every name here starts with devices_, item_devices_ or trigger_devices. -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="item_devices_title">Device batteries</string>
-    <string name="item_devices_desc">The battery of your mouse, keyboard or stylus; shows when one is low</string>
+    <string name="item_devices_desc">The battery of your mouse, keyboard, stylus or headphones; shows when one is low</string>
     <string name="trigger_devices">Show when a device\'s battery is below %1$s</string>
     <string name="trigger_devices_short">shows below %1$s</string>
     <string name="devices_none">No device reports a battery</string>
-    <string name="devices_note">Mice, keyboards, styluses and game controllers that tell Android their battery level. Headphones aren\'t included: reading their level would take Bluetooth access, which BentoBar doesn\'t ask for.</string>
+    <string name="devices_note">Mice, keyboards, styluses, game controllers, headphones and watches that report their battery level, connected directly or over Bluetooth. A Galaxy watch\'s level needs root.</string>
+    <string name="devices_note_no_headphones">Mice, keyboards, styluses and game controllers that tell Android their battery level. Headphones, and Bluetooth devices that report only over Bluetooth, need permission to see your Bluetooth devices.</string>
+    <string name="devices_show_headphones">Show Bluetooth devices</string>
     <!-- A device's row in the menu: "85% · Charging" (%1$s is the level), or "Level unknown" for a battery that doesn't say. -->
     <string name="devices_level_charging">%1$s · Charging</string>
     <string name="devices_unknown">Level unknown</string>
@@ -31,4 +33,16 @@
         <item quantity="one">%1$s battery %2$d percent, charging</item>
         <item quantity="other">%1$s battery %2$d percent, charging</item>
     </plurals>
+    <string name="devices_pin_note">Tap a device to keep it in the bar.</string>
+    <string name="devices_pinned_note">The pinned device stays in the bar. Tap it again to show the lowest battery.</string>
+    <string name="devices_in_bar">Shown in the bar</string>
+    <string name="devices_in_bar_lowest">Lowest battery</string>
+    <string name="devices_in_bar_help">The lowest battery, or one device you choose. While that device is away, the lowest is shown.</string>
+    <string name="devices_cases">Charging cases</string>
+    <string name="devices_case_of">%1$s case</string>
+    <string name="devices_case_seen">%1$s · %2$s ago</string>
+    <string name="devices_share">Share with other apps</string>
+    <string name="devices_share_help">Lets apps you allow read your devices\' batteries: their kind, name and level, and the earbuds\' cases. Each app still asks Android for your permission first. Applies to this device, not to one item.</string>
+    <string name="devices_share_permission_label">read device batteries from BentoBar</string>
+    <string name="devices_share_permission_desc">Read the battery levels and names of the mice, keyboards, earbuds and other devices BentoBar sees, while BentoBar\'s sharing is on.</string>
 </resources>

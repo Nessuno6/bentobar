@@ -101,6 +101,8 @@ class DebugReceiver : BroadcastReceiver() {
                     if (args.getOrNull(2) == "on") Online.turnOn(s) else Online.turnOff(s)
                     "${s.id} on=${Online.on(s)}"
                 }
+                // `on <display id> <command>`: a strip on another display's taskbar.
+                "on" -> (Env.service as? BarService)?.controller(args.getOrNull(1)?.toIntOrNull() ?: -1)?.debug(args.drop(2)) ?: "no strip on that display"
                 "item" -> Items.of(args[1])?.debug(args.drop(2)) ?: "no hook for ${args.drop(1).joinToString(" ")}"
                 "finish" -> { com.meridian11.books.bentobar.ui.MainActivity.current?.finish(); "ok" }
                 "bar" -> { Store.update { it.copy(enabled = args.getOrNull(1) != "off") }; "ok" }

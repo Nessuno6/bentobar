@@ -101,8 +101,11 @@ object HeatItem : ItemType("heat", R.string.item_heat_title, Sym.DEVICE_THERMOST
                     stringResource(if (fahrenheit) R.string.heat_temp_f else R.string.heat_temp_c, HeatRules.oneDecimal(temp, fahrenheit)))
             }
             if (Env.cpu.available) InfoRow(stringResource(R.string.heat_cpu_load), Fmt.percent(Env.cpu.total))
+            // With root, the chip's own temperatures (which Android doesn't share with apps).
+            ChipTemps()
             Spacer(Modifier.height(6.dp))
-            MenuNote(stringResource(if (level != null) R.string.heat_note else R.string.heat_note_no_level))
+            // "Android doesn't share CPU temperature" is not so with root, where the rows above show it.
+            if (level != null || RootThermal.temps == null) MenuNote(stringResource(if (level != null) R.string.heat_note else R.string.heat_note_no_level))
             MenuDivider()
             MenuEntry(Sym.BOLT, stringResource(R.string.cpu_battery_usage)) { host.close(); Env.launch(Intent(Intent.ACTION_POWER_USAGE_SUMMARY)) }
         }

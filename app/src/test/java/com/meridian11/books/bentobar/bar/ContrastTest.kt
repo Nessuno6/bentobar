@@ -40,6 +40,22 @@ class ContrastTest {
         assertFalse(Contrast.resolve(Contrast.DARK_TEXT, null).barDark)
     }
 
+    @Test fun oppositeTakesTheOtherOfLightAndDark() {
+        // Read as white glyphs, or as a black bar: near-black text.
+        for (matched in listOf(Contrast.resolve(white, null), Contrast.resolve(white, black))) {
+            val o = Contrast.opposite(matched)
+            assertEquals(Contrast.DARK_TEXT, o.fg)
+            assertFalse(o.barDark)
+            assertFalse(o.opaque)
+        }
+        // Read as dark glyphs, or as a light bar: white text.
+        for (matched in listOf(Contrast.resolve(Contrast.DARK_TEXT, null), Contrast.resolve(Color(0xFFBDBDBD), Color(0xFFF1F3F4)))) {
+            val o = Contrast.opposite(matched)
+            assertEquals(white, o.fg)
+            assertTrue(o.barDark)
+        }
+    }
+
     @Test fun midToneBarStillReaches45() {
         val teal = Color(0xFF3F6F73)
         val look = Contrast.resolve(Color(0xFF6A8E91), teal)

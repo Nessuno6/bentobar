@@ -40,7 +40,9 @@ class OneWayOutTest {
             "Socket", "OkHttp", "okhttp", "WebView", "CookieHandler", "CookieManager", "DownloadManager", "HttpClient", "ktor", "URL(")
         for (f in sources) {
             if (f.place() == "net/HttpTransport.kt") continue
-            val text = code(f)
+            // Device batteries' link opens a channel to the user's other device through Google Play services (the Cross
+            // device SDK's openConnection), and only that: no other way out is allowed there either.
+            val text = if (f.place() == "items/Link.kt") code(f).replace("participant.openConnection(CHANNEL)", "") else code(f)
             for (way in ways) assertTrue("${f.place()} mentions $way: connections are opened in net/HttpTransport.kt only", way !in text)
         }
     }

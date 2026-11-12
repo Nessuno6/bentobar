@@ -13,4 +13,18 @@ internal object PopupRules {
         if (open != "bentobar" && !open.startsWith("item:")) return false
         return open != "item:$hovered"
     }
+
+    /**
+     * Where a popup [width] px wide goes across the screen, under (or over) an item from [itemLeft] to [itemRight], on a
+     * strip from [stripLeft] to [stripRight]: in the screen's right half its right edge lines up with the item's, in the
+     * left half its left edge; then it is kept within the strip, so it never strays past the strip's ends. A popup wider
+     * than the strip lines up with the strip's end on the item's side. And always [margin] px inside the screen.
+     */
+    fun popupLeft(itemLeft: Int, itemRight: Int, width: Int, stripLeft: Int, stripRight: Int, screenWidth: Int, margin: Int): Int {
+        val rightHalf = (itemLeft + itemRight) / 2 > screenWidth / 2
+        val byItem = if (rightHalf) itemRight - width else itemLeft
+        val inStrip = if (width <= stripRight - stripLeft) byItem.coerceIn(stripLeft, stripRight - width)
+            else if (rightHalf) stripRight - width else stripLeft
+        return inStrip.coerceIn(margin, (screenWidth - width - margin).coerceAtLeast(margin))
+    }
 }

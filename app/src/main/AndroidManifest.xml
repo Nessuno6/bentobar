@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Device batteries' headphones: the battery level connected Bluetooth audio devices report. Asked for only from that
+         item's menu ("Show headphones"); without it the item lists input devices only, as before. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- Weather's My location, asked for only when an item chooses it: approximate only, never precise, and no background-location permission: Android gives the bar's accessibility service the location under the "while using the app" grant (how Play reads that is decided with the 1.4 submission). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -42,6 +45,20 @@
     <!-- Backups carry the layout, as before. What belongs to one install (whether an online service is
          switched on, the user's key, what a service last sent) is kept in Android's no-backup directory,
          and the rules say so once more. No connection is ever made in clear text. -->
+    <!-- Device batteries for other apps (items/DevicesProvider): each app needs the user's grant, and BentoBar answers
+         only while its sharing switch is on (data/Sharing). -->
+    <permission
+        android:name="com.meridian11.books.bentobar.permission.READ_DEVICE_BATTERIES"
+        android:label="@string/devices_share_permission_label"
+        android:description="@string/devices_share_permission_desc"
+        android:protectionLevel="dangerous" />
+    <!-- The bar's items for other apps (items/ItemsProvider): the same two locks, a permission and a switch of its own. -->
+    <permission
+        android:name="com.meridian11.books.bentobar.permission.READ_BAR_ITEMS"
+        android:label="@string/share_items_permission_label"
+        android:description="@string/share_items_permission_desc"
+        android:protectionLevel="dangerous" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -73,6 +90,22 @@
         <!-- "BentoBar menu": opens the bar's menu with every item, for the keyboard. A launcher entry so
              it can be given a shortcut in the system's keyboard shortcut settings (Action + / › Customize);
              BentoBar itself never reads keys. -->
+        <!--
+          Device batteries' link to the user's other device (items/Link): opens Google's device picker from the menu, and
+          is what Google Play services start on the device picked, with the LINK action, to accept. Finishes at once.
+        -->
+        <activity
+            android:name=".ui.LinkActivity"
+            android:exported="true"
+            android:theme="@style/Theme.BentoBar.Invisible"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="com.meridian11.books.bentobar.LINK" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".ui.BarMenuActivity"
             android:exported="true"
@@ -155,6 +188,104 @@
 
         <receiver android:name=".items.TimerAlarm" android:exported="false" />
         <receiver android:name=".items.ChipAction" android:exported="false" />
+
+        <!-- The home screen widgets (widget/Widgets.kt). Android's widget service sends them their updates, so none is
+             exported; the settings screen is, because the launcher opens it. -->
+        <receiver
+            android:name=".widget.MainWidget"
+            android:exported="false"
+            android:label="@string/widget_main_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_main" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget1"
+            android:exported="false"
+            android:label="@string/widget_1_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_1" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget2"
+            android:exported="false"
+            android:label="@string/widget_2_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_2" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget3"
+            android:exported="false"
+            android:label="@string/widget_3_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_3" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget4"
+            android:exported="false"
+            android:label="@string/widget_4_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_4" />
+        </receiver>
+        <receiver
+            android:name=".widget.CustomWidget"
+            android:exported="false"
+            android:label="@string/widget_custom_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_custom" />
+        </receiver>
+        <activity
+            android:name=".widget.WidgetSettingsActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/widget_settings_title"
+            android:theme="@style/Theme.BentoBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".widget.WidgetJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!-- Read only; guarded by the permission above. -->
+        <provider
+            android:name=".items.DevicesProvider"
+            android:authorities="com.meridian11.books.bentobar.devices"
+            android:exported="true"
+            android:readPermission="com.meridian11.books.bentobar.permission.READ_DEVICE_BATTERIES"
+            android:writePermission="com.meridian11.books.bentobar.permission.READ_DEVICE_BATTERIES" />
+        <!-- Read only; guarded by its own permission above. -->
+        <provider
+            android:name=".items.ItemsProvider"
+            android:authorities="com.meridian11.books.bentobar.items"
+            android:exported="true"
+            android:readPermission="com.meridian11.books.bentobar.permission.READ_BAR_ITEMS"
+            android:writePermission="com.meridian11.books.bentobar.permission.READ_BAR_ITEMS" />
 
     </application>
 </manifest>

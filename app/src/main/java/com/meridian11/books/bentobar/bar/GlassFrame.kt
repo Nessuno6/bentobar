@@ -13,8 +13,8 @@ internal object GlassFrame {
      * radius now ([corner]) against the last one given ([lastCorner]). New bounds take new corners with them: the
      * platform reads the outline from the background, whose bounds follow the root's only when it next draws.
      */
-    fun work(rootRight: Int, rootBottom: Int, width: Int, bottom: Int, corner: Float, lastCorner: Float): Work {
-        val bounds = rootRight != width || rootBottom != bottom
+    fun work(rootRight: Int, rootBottom: Int, width: Int, bottom: Int, corner: Float, lastCorner: Float, rootTop: Int = 0, top: Int = 0): Work {
+        val bounds = rootRight != width || rootBottom != bottom || rootTop != top
         return Work(bounds = bounds, outline = bounds || corner != lastCorner)
     }
 }

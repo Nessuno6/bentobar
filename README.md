@@ -199,8 +199,15 @@ only with apps that have notification access. That access is optional, and Bento
 send it no notifications: it receives none. Without it the item still shows that something plays and
 controls it. Nothing about what you play is stored or sent.
 
+**Sharing device batteries with other apps is off by default.** If you turn on *Share with other
+apps* in Device batteries' settings, an app can read the kind, name and battery level of the devices
+BentoBar sees, and the earbuds' cases as last seen, but only after you grant it Android's permission
+*read device batteries from BentoBar*, app by app. BentoBar sends nothing anywhere for this: the app
+asks BentoBar on this device. Turning the switch off stops every app at once; Android's app settings
+take the permission back from one.
+
 If you use Android's backup, Android keeps a copy of BentoBar's settings in your Google account. Your
-AirLabs and Finnhub keys and the online switches are left out of it.
+AirLabs and Finnhub keys, the online switches and the sharing switch are left out of it.
 
 **Usage access is optional and off by default.** If you turn it on (Setup, or the Network and
 Storage menus), BentoBar reads how much data and storage each app uses, to list the top five in
@@ -222,8 +229,14 @@ show the whole system instead.
 | Notification access *(optional)* | Now playing's title, artist and artwork; BentoBar receives no notifications |
 | Network state, launcher apps | the network menu, and picking apps for shortcuts |
 
+BentoBar also defines one permission for other apps, *read device batteries from BentoBar*: see
+[Device batteries in your app](#device-batteries-in-your-app).
+
 ## Good to know
 
+- **Home screen widget.** *Device batteries* comes as a widget too (4 x 2, one to four devices, or a custom grid): an
+  arc for this device and each of your others, the linked phone or tablet included. Long-press it, then Settings, to pin
+  devices to cells and set their order. It refreshes when a reading changes and every 15 minutes; tap it to refresh now.
 - **System icons stay.** Android doesn't let an installed app hide or reorder the system's own
   icons (clock, Wi-Fi, battery, notifications), so BentoBar organises its own items next to them.
 - **Keyboard shortcut.** The launcher entry **BentoBar menu** opens BentoBar's menu with every item
@@ -237,6 +250,34 @@ show the whole system instead.
   tools, and with it BentoBar's bar. The chip and tiles keep working.
 - **Light on battery:** about 0.5% of one CPU core with the CPU and network items updating every
   second, and nothing at all while the screen is off.
+
+## Device batteries in your app
+
+Your app can read what Device batteries sees, once the user turns on **Share with other apps** in that
+item's settings and grants your app the permission. Declare and request it like any runtime permission:
+
+```xml
+<uses-permission android:name="com.meridian11.books.bentobar.permission.READ_DEVICE_BATTERIES" />
+<queries><package android:name="com.meridian11.books.bentobar" /></queries>
+```
+
+Then query `content://com.meridian11.books.bentobar.devices/devices` (read only):
+
+| Column | Value |
+|---|---|
+| `kind` | `mouse`, `keyboard`, `stylus`, `gamepad`, `headphones`, `watch`, `phone` or `tablet` |
+| `name` | the device's own name; can be empty |
+| `percent` | 0–100, or null when the device has a battery that doesn't say how full |
+| `charging` | 1 or 0 |
+| `ears` | earbuds only: `both`, `left`, `right` or `one`; null for anything else |
+
+and `…/cases` for earbuds' charging cases as last seen (a case reports its level only while a bud is in it):
+`name` (the earbuds'), `percent` and `seen_at` (wall-clock milliseconds).
+
+The cursor's extras hold `enabled` (false while sharing is off, when every table is empty) and `version`
+(raised only for a change your code must check for; new columns can appear without one). Register a
+`ContentObserver` on `content://com.meridian11.books.bentobar.devices` with descendants to hear when the
+rows change. A query is answered from a reading at most 10 seconds old, taken anew when needed.
 
 ## Build
 

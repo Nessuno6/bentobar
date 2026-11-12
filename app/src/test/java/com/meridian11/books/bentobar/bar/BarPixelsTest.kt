@@ -66,6 +66,14 @@ class BarPixelsTest {
         assertNotNull(c.background)
     }
 
+    /** A light bar's dark glyphs are translucent black (about 60%) on a clear bar: they still read as dark text. */
+    @Test fun translucentDarkGlyphsReadAsDarkText() {
+        val c = BarPixels.colors(box(0x99000000.toInt()) { 0 }, w)!!
+        assertEquals(0x000000, rgb(c.text))
+        assertNull(c.background)
+        assertTrue(Contrast.resolve(c.text!!, null).let { !it.barDark })
+    }
+
     /** Caught while the bar fades in: nothing is opaque yet, so there is no reading (the last one is kept). */
     @Test fun fadingBarIsNoReading() {
         assertNull(BarPixels.colors(box(0x80FFFFFF.toInt()) { 0x40000000 }, w))

@@ -61,6 +61,8 @@ data class ItemState(
     /** "Has something to say": hidden items with whenActive pop into the bar while this is true. */
     val active: Boolean = false,
     val tone: Tone = Tone.NORMAL,
+    /** The icon in a colour of its own (a charging bolt), while [tone] is normal; null: the bar's. */
+    val iconColor: androidx.compose.ui.graphics.Color? = null,
     /** An app icon instead of a symbol. */
     val image: Bitmap? = null,
     /** Spacers: a fixed gap in dp (text and icon unused). */

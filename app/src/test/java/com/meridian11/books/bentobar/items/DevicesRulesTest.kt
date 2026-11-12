@@ -229,7 +229,8 @@ class DevicesRulesTest {
     @Test fun whenAllAreChargingTheLowestOfThemIsShown() {
         val shown = bar(mouse(40, charging = true), keyboard(8, charging = true))
         assertEquals("8%", shown.text)
-        assertEquals(Sym.KEYBOARD, shown.glyph)
+        // Charging: the bolt, as the Battery item shows; the tooltip names the keyboard.
+        assertEquals(Sym.BOLT, shown.glyph)
         assertEquals(Tone.NORMAL, shown.tone)
         assertFalse(shown.active)
     }
@@ -458,7 +459,7 @@ class DevicesRulesTest {
 
     @Test fun theCodeThatReadsDeviceNamesWritesNoLogLines() {
         // A device's name can be a person's ("Alex's mouse"): it is shown, and written nowhere.
-        for (file in listOf("DevicesItem.kt", "DevicesRules.kt")) {
+        for (file in listOf("DevicesItem.kt", "DevicesRules.kt", "DevicesProvider.kt", "DevicesShareRules.kt")) {
             val code = java.io.File("src/main/java/com/meridian11/books/bentobar/items", file).readText()
             for (way in listOf("Log.", "println(", "printStackTrace", "System.out", "System.err")) assertFalse("$file has $way", way in code)
         }
@@ -469,16 +470,33 @@ class DevicesRulesTest {
     @Test fun theTextIsTheCopyDecksToTheCharacter() {
         val deck = mapOf(
             "item_devices_title" to "Device batteries",
-            "item_devices_desc" to "The battery of your mouse, keyboard or stylus; shows when one is low",
+            "item_devices_desc" to "The battery of your mouse, keyboard, stylus or headphones; shows when one is low",
             "trigger_devices" to "Show when a device's battery is below %1\$s",
             "trigger_devices_short" to "shows below %1\$s",
             "devices_none" to "No device reports a battery",
             "devices_level_charging" to "%1\$s · Charging",
             "devices_unknown" to "Level unknown",
-            "devices_note" to "Mice, keyboards, styluses and game controllers that tell Android their battery level. Headphones aren't included: " +
-                "reading their level would take Bluetooth access, which BentoBar doesn't ask for.",
+            "devices_note" to "Mice, keyboards, styluses, game controllers, headphones and watches that report their battery level, " +
+                "connected directly or over Bluetooth. A Galaxy watch's level needs root.",
+            "devices_note_no_headphones" to "Mice, keyboards, styluses and game controllers that tell Android their battery level. " +
+                "Headphones, and Bluetooth devices that report only over Bluetooth, need permission to see your Bluetooth devices.",
+            "devices_show_headphones" to "Show Bluetooth devices",
             "devices_bluetooth_settings" to "Bluetooth settings",
             "devices_desc_unknown" to "%1\$s, battery level unknown",
+            "devices_pin_note" to "Tap a device to keep it in the bar.",
+            "devices_pinned_note" to "The pinned device stays in the bar. Tap it again to show the lowest battery.",
+            "devices_in_bar" to "Shown in the bar",
+            "devices_in_bar_lowest" to "Lowest battery",
+            "devices_in_bar_help" to "The lowest battery, or one device you choose. While that device is away, the lowest is shown.",
+            "devices_cases" to "Charging cases",
+            "devices_case_of" to "%1\$s case",
+            "devices_case_seen" to "%1\$s · %2\$s ago",
+            "devices_share" to "Share with other apps",
+            "devices_share_help" to "Lets apps you allow read your devices' batteries: their kind, name and level, and the earbuds' cases. " +
+                "Each app still asks Android for your permission first. Applies to this device, not to one item.",
+            "devices_share_permission_label" to "read device batteries from BentoBar",
+            "devices_share_permission_desc" to "Read the battery levels and names of the mice, keyboards, earbuds and other devices " +
+                "BentoBar sees, while BentoBar's sharing is on.",
         )
         // Sentences with a number in them are plurals, as everywhere in the app; in English both forms read alike.
         val counted = mapOf(
@@ -506,5 +524,154 @@ class DevicesRulesTest {
         assertEquals("85% · Charging", text.format("devices_level_charging", "85%"))
         assertEquals("Show when a device's battery is below 20%", text.format("trigger_devices", "20%"))
         assertEquals("shows below 20%", text.format("trigger_devices_short", "20%"))
+    }
+
+    @Test fun headphonesThatReportALevelAreListedWithTheRest() {
+        val audio = listOf(DevicesRules.Audio("AA", "Galaxy Buds", 35), DevicesRules.Audio("BB", "Old speaker", -1))
+        val phones = DevicesRules.headphones(audio)
+        assertEquals(1, phones.size)
+        assertEquals(DevicesRules.Kind.HEADPHONES, phones[0].kind)
+        assertEquals(35, phones[0].percent)
+        // In the menu's order with the input devices, and the bar shows the lowest of all.
+        val all = DevicesRules.order(DevicesRules.staged(listOf("mouse=80"))!! + phones)
+        assertEquals(listOf(DevicesRules.Kind.HEADPHONES, DevicesRules.Kind.MOUSE), all.map { it.kind })
+        assertEquals(DevicesRules.Kind.HEADPHONES, DevicesRules.shown(all)!!.kind)
+    }
+
+    @Test fun leAudioEarbudsAreOneRowWithTheLowestLevel() {
+        // As a Samsung tablet listed Galaxy Buds over LE Audio: the left earbud's LE-only device at 13% (Samsung's app said 13%),
+        // the main connection at 27%, the two earbuds added up.
+        val buds = listOf(DevicesRules.Audio("LE", "My Buds", 13, main = false), DevicesRules.Audio("MAIN", "My Buds", 27, main = true))
+        val rows = DevicesRules.headphones(buds)
+        assertEquals(1, rows.size)
+        assertEquals(13, rows[0].percent)
+        assertEquals("bt:MAIN", rows[0].descriptor)
+        // One says nothing: the other's level stands in.
+        assertEquals(27, DevicesRules.headphones(listOf(buds[0].copy(level = -1), buds[1]))[0].percent)
+        // Two pairs of different names stay two.
+        assertEquals(2, DevicesRules.headphones(buds + DevicesRules.Audio("SPK", "Speaker", 70)).size)
+    }
+
+    @Test fun aBluetoothMouseIsListedUnlessItsInputDeviceAlreadyTellsItsBattery() {
+        // Bluetooth's classes as the tablet listed them: a mouse (0x580), keyboards (0x540), a gamepad (0x508), the Buds (0x404).
+        assertEquals(Kind.MOUSE, DevicesRules.kindOf(0x580))
+        assertEquals(Kind.KEYBOARD, DevicesRules.kindOf(0x540))
+        assertEquals(Kind.GAMEPAD, DevicesRules.kindOf(0x508))
+        assertEquals(Kind.HEADPHONES, DevicesRules.kindOf(0x404))
+        assertNull(DevicesRules.kindOf(0x20C)) // a phone
+        val bt = DevicesRules.headphones(listOf(DevicesRules.Audio("M", "Pebble M350s", 60, deviceClass = 0x580),
+            DevicesRules.Audio("K", "Keychron K8 HE", 40, deviceClass = 0x540)))
+        assertEquals(setOf(Kind.KEYBOARD, Kind.MOUSE), bt.map { it.kind }.toSet())
+        // The keyboard's input device tells its battery: it is listed once, from there; the mouse's doesn't, so it comes from Bluetooth.
+        val input = listOf(Device("d", "Keychron K8 HE Keyboard", Kind.KEYBOARD, 40, charging = false))
+        val all = DevicesRules.merge(input, bt)
+        assertEquals(listOf("Keychron K8 HE Keyboard", "Pebble M350s"), all.map { it.name })
+    }
+
+    @Test fun earbudsShowWhichAreConnected() {
+        val left = DevicesRules.Audio("L", "My Buds", 13, main = false, side = DevicesRules.Ears.LEFT)
+        val right = DevicesRules.Audio("R", "My Buds", 27, main = true, side = DevicesRules.Ears.RIGHT)
+        assertEquals(DevicesRules.Ears.BOTH, DevicesRules.headphones(listOf(left, right))[0].ears)
+        assertEquals(DevicesRules.Ears.RIGHT, DevicesRules.headphones(listOf(right))[0].ears)
+        assertEquals(DevicesRules.Ears.LEFT, DevicesRules.headphones(listOf(left))[0].ears)
+        // Headphones that are one device, and a mouse: their kind's glyph.
+        val headset = DevicesRules.headphones(listOf(DevicesRules.Audio("H", "Headset", 50)))[0]
+        assertEquals(Sym.HEADPHONES, DevicesRules.glyph(headset))
+        val mouse = DevicesRules.headphones(listOf(DevicesRules.Audio("M", "Mouse", 50, deviceClass = 0x580, side = DevicesRules.Ears.LEFT)))[0]
+        assertEquals(Sym.MOUSE, DevicesRules.glyph(mouse))
+        // The earbud glyphs are still the headphones' to the Material font.
+        assertTrue(DevicesRules.EARBUDS_BOTH.startsWith(Sym.HEADPHONES))
+    }
+
+    @Test fun theEarsFromTheBluetoothReport() {
+        val dump = """
+              ● Device [xx:xx:xx:xx:ac:fb]: CONNECTED (0x01), Encrypted, conn_id: 83
+            	  Audio Locations: Sink= right, Source= right
+              ● Device [xx:xx:xx:xx:00:e7]: CONNECTED (0x10), Encrypted, conn_id: 339
+            	  Audio Locations: Sink= left, Source= left
+        """.trimIndent()
+        assertEquals(mapOf("ac:fb" to DevicesRules.Ears.RIGHT, "00:e7" to DevicesRules.Ears.LEFT), DevicesRules.sides(dump))
+        // An earbud whose ear isn't known still shows one bud.
+        val one = DevicesRules.headphones(listOf(DevicesRules.Audio("R", "My Buds", 87, earbud = true)))[0]
+        assertEquals(DevicesRules.Ears.ONE, one.ears)
+        assertEquals(DevicesRules.EARBUDS_RIGHT, DevicesRules.glyph(one))
+    }
+
+    @Test fun aWatchIsListed() {
+        // A Galaxy Watch7's class: wearable, wristwatch.
+        assertEquals(Kind.WATCH, DevicesRules.kindOf(1796))
+        val watch = DevicesRules.headphones(listOf(DevicesRules.Audio("W", "My Watch7", 66, deviceClass = 1796)))
+        assertEquals(listOf(Kind.WATCH), watch.map { it.kind })
+        assertEquals(Sym.WATCH, DevicesRules.glyph(watch[0]))
+    }
+
+    @Test fun anEarbudInItsCaseThatKeepsItsLinkIsNotCounted() {
+        val left = DevicesRules.Audio("L", "My Buds", 13, main = false, side = DevicesRules.Ears.LEFT, inUse = false)
+        val right = DevicesRules.Audio("R", "My Buds", 87, main = true, side = DevicesRules.Ears.RIGHT, inUse = true)
+        val rows = DevicesRules.headphones(listOf(left, right))
+        assertEquals(DevicesRules.Ears.RIGHT, rows[0].ears)
+        assertEquals(87, rows[0].percent)
+        // LE Audio has none of them (off, or headphones it doesn't carry): all count.
+        val off = listOf(left.copy(inUse = false), right.copy(inUse = false))
+        assertEquals(DevicesRules.Ears.BOTH, DevicesRules.headphones(off)[0].ears)
+    }
+
+    @Test fun samsungsCompanionListSaysWhichEarbudsAndWhetherTheCaseCharge() {
+        // Earbuds in their case: the pair's own status says nothing (1), each earbud's and the case's say charging (2).
+        val buds = DevicesRules.companions("device\tAA:BB:CC:DD:AC:FB\t3\t65\t1\t65\t66\t84\t2\t2\t2")["AA:BB:CC:DD:AC:FB"]!!
+        assertTrue(buds.leftCharging && buds.rightCharging && buds.caseCharging)
+        assertFalse(buds.charging)
+        assertEquals(DevicesRules.Ears.BOTH, buds.chargingEars)
+        val left = DevicesRules.companions("device\tAA:BB:CC:DD:AC:FB\t3\t65\t1\t65\t-1\t84\t2\t3\t3")["AA:BB:CC:DD:AC:FB"]!!
+        assertEquals(DevicesRules.Ears.LEFT, left.chargingEars)
+        assertFalse(left.caseCharging)
+        // An older line, without the statuses: nothing charges.
+        assertNull(DevicesRules.companions("device\tAA:BB:CC:DD:AC:FB\t3\t65\t1\t65\t66\t84")["AA:BB:CC:DD:AC:FB"]!!.chargingEars)
+        // A pair carries which of its earbuds charge.
+        val pair = DevicesRules.headphones(listOf(DevicesRules.Audio("A", "Buds", 65, charging = true, chargingEars = DevicesRules.Ears.BOTH)))
+        assertEquals(DevicesRules.Ears.BOTH, pair[0].chargingEars)
+        assertTrue(pair[0].charging)
+    }
+
+    @Test fun samsungsCompanionListSaysWhatChargesAndTheBarShowsTheBolt() {
+        val out = "device\tAA:BB:CC:DD:B9:56\t4\t74\t2\t0\t0\t0\ndevice\taa:bb:cc:dd:ac:fb\t2\t49\t3\t-1\t-1\t-1\nerror\tSecurityException"
+        val list = DevicesRules.companions(out)
+        assertEquals(DevicesRules.Companion(74, charging = true), list["AA:BB:CC:DD:B9:56"])
+        // Earbuds with their case known: its level comes along.
+        assertEquals(DevicesRules.Companion(60, charging = false, case = 72),
+            DevicesRules.companions("device\tAA:BB:CC:DD:B9:56\t4\t60\t3\t60\t58\t72")["AA:BB:CC:DD:B9:56"])
+        assertEquals(DevicesRules.Companion(49, charging = false), list["AA:BB:CC:DD:AC:FB"])
+        assertEquals(2, list.size)
+        // A watch on its charger: the bar shows the bolt; the device itself is said in the tooltip.
+        val watch = DevicesRules.headphones(listOf(DevicesRules.Audio("W", "My Watch7", 74, deviceClass = 1796, charging = true)))
+        assertTrue(watch[0].charging)
+        assertEquals(Sym.BOLT, DevicesRules.bar(watch, 20, words).glyph)
+    }
+
+    @Test fun aCaseIsKeptUntilItIsReadAgain() {
+        var cases = DevicesRules.remember(emptyList(), "My Buds", 72, 1_000)
+        cases = DevicesRules.remember(cases, "Other Buds", 40, 2_000)
+        cases = DevicesRules.remember(cases, "My Buds", 65, 3_000)
+        assertEquals(listOf("My Buds" to 65, "Other Buds" to 40), cases.map { it.name to it.level })
+        assertEquals(cases, DevicesRules.decodeCases(DevicesRules.encodeCases(cases)))
+        assertEquals(emptyList<DevicesRules.Case>(), DevicesRules.decodeCases(null))
+        assertEquals(listOf("Ok"), DevicesRules.decodeCases("x\t1\tBad\n50\tnow\tBad\n50\t1\tOk").map { it.name })
+    }
+
+    @Test fun theDevicePickedForTheBarIsShownWhileItIsThere() {
+        val devices = listOf(Device("a", "Mouse", Kind.MOUSE, 10, charging = false), Device("b", "My Phone", Kind.PHONE, 80, charging = false))
+        assertEquals("My Phone", DevicesRules.shown(devices, "My Phone")?.name)
+        assertEquals(Sym.SMARTPHONE, DevicesRules.bar(devices, 20, words, "My Phone").glyph)
+        // Away: the lowest again.
+        assertEquals("Mouse", DevicesRules.shown(devices, "Watch")?.name)
+        assertEquals("Mouse", DevicesRules.shown(devices, null)?.name)
+        // On its charger the phone keeps its own icon, with the bolt in it.
+        val charging = devices.map { it.copy(charging = it.kind == Kind.PHONE) }
+        assertEquals(Sym.SMARTPHONE + DevicesRules.CHARGING, DevicesRules.bar(charging, 20, words, "My Phone").glyph)
+        // A linked phone on super fast charging 2.0: two bolts in it, coloured as the Battery item's.
+        val fast = charging.map { if (it.kind == Kind.PHONE) it.copy(speed = ChargeSpeed.SUPER_2) else it }
+        val bar = DevicesRules.bar(fast, 20, words, "My Phone")
+        assertEquals(Sym.SMARTPHONE + DevicesRules.CHARGING_2, bar.glyph)
+        assertEquals(ChargeSpeed.SUPER_2, bar.speed)
     }
 }

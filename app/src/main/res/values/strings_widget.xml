@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home screen widget (widget/): Device batteries as arcs, in four sizes and a custom grid. -->
+<resources>
+    <string name="widget_main_name">Device batteries</string>
+    <string name="widget_main_desc">This device and your others, as arcs: two rows of four</string>
+    <string name="widget_1_name">Device batteries · 1 device</string>
+    <string name="widget_2_name">Device batteries · 2 devices</string>
+    <string name="widget_3_name">Device batteries · 3 devices</string>
+    <string name="widget_4_name">Device batteries · 4 devices</string>
+    <string name="widget_custom_name">Device batteries · Custom</string>
+    <string name="widget_1_desc">One device. Its settings choose which</string>
+    <string name="widget_2_desc">Two devices in a row, or a column when resized tall</string>
+    <string name="widget_3_desc">Three devices in a row, or a column when resized tall</string>
+    <string name="widget_4_desc">Four devices in a row, or a column when resized tall</string>
+    <string name="widget_custom_desc">Your own grid: its rows, its columns and what each cell shows</string>
+
+    <string name="widget_settings_title">Widget settings</string>
+    <string name="widget_settings_help">Tap a cell to choose what it shows. Auto cells fill in the device order below with the devices that are here; a device you pin keeps its cell, and its icon while it is away.</string>
+    <string name="widget_auto">Auto</string>
+    <string name="widget_empty">Empty</string>
+    <string name="widget_device">Device</string>
+    <string name="widget_away">%1$s (away)</string>
+    <string name="widget_level">%1$s  %2$s</string>
+    <string name="widget_columns">Columns</string>
+    <string name="widget_rows">Rows</string>
+    <string name="widget_resize_note">Resize the widget on the home screen to fit: about one home screen cell for each.</string>
+    <string name="widget_save">Save</string>
+    <string name="widget_all_auto">All auto</string>
+    <string name="widget_every">For every widget</string>
+    <string name="widget_text">Text color</string>
+    <string name="widget_text_system">Follow dark mode</string>
+    <string name="widget_text_auto">Match wallpaper</string>
+    <string name="widget_text_dark">Dark</string>
+    <string name="widget_text_light">Light</string>
+    <string name="widget_order">Device order</string>
+    <string name="widget_order_help">Auto cells fill from the top down. Switch a device off to keep it out of auto cells.</string>
+    <string name="widget_move_up">Move up</string>
+    <string name="widget_move_down">Move down</string>
+    <string name="widget_forget">Forget</string>
+    <string name="widget_from_link">from %1$s</string>
+    <string name="widget_seen">seen %1$s ago</string>
+</resources>
