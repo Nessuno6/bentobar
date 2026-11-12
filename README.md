@@ -30,8 +30,9 @@
 >   **Look › Other apps** switch. They can open an item's own menu where they show it (on a tap or when the pointer
 >   rests on it), close it again, and hide items, or the whole strip, from BentoBar's bar while they show them.
 >   External displays always keep their whole strip.
-> - **Widgets** for the home screen, **links** to single items, a **charge speed** reading, extra readings on
->   rooted devices, and **One UI icons** for items.
+> - **Widgets** for the home screen, and Device batteries widgets for **One UI's lock screen** (1 or 2 devices).
+> - **Links** to single items, a **charge speed** reading, extra readings on rooted devices, and **One UI icons**
+>   for items.
 >
 > Its releases are signed with a different key than the official app's: uninstall the official BentoBar before
 > installing one.

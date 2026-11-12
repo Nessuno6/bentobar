@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The One UI icons are looked up by name (util/OneUiIcons), which resource shrinking can't see: keep them all. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/oneui_*" />

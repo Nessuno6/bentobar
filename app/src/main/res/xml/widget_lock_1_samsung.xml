@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One UI: this widget goes on the lock screen (targetHost 0x2), 1 x 1. See values/attrs_samsung_widget.xml. -->
+<samsung-appwidget-info xmlns:app="http://schemas.android.com/apk/res-auto"
+    app:targetHost="0x00000002"
+    app:widgetSize="0x00000001" />

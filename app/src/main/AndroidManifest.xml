@@ -257,6 +257,35 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_custom" />
         </receiver>
+        <!-- One UI's lock screen: Samsung's own widget info puts these there (values/attrs_samsung_widget.xml). -->
+        <receiver
+            android:name=".widget.LockWidget1"
+            android:exported="false"
+            android:label="@string/widget_lock_1_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_lock_1" />
+            <meta-data
+                android:name="samsung.appwidget.monotone.info"
+                android:resource="@xml/widget_lock_1_samsung" />
+        </receiver>
+        <receiver
+            android:name=".widget.LockWidget2"
+            android:exported="false"
+            android:label="@string/widget_lock_2_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_lock_2" />
+            <meta-data
+                android:name="samsung.appwidget.monotone.info"
+                android:resource="@xml/widget_lock_2_samsung" />
+        </receiver>
         <activity
             android:name=".widget.WidgetSettingsActivity"
             android:exported="true"

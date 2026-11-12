@@ -13,6 +13,10 @@
     <string name="widget_3_desc">Three devices in a row, or a column when resized tall</string>
     <string name="widget_4_desc">Four devices in a row, or a column when resized tall</string>
     <string name="widget_custom_desc">Your own grid: its rows, its columns and what each cell shows</string>
+    <string name="widget_lock_1_name">Device batteries · lock screen, 1 device</string>
+    <string name="widget_lock_2_name">Device batteries · lock screen, 2 devices</string>
+    <string name="widget_lock_1_desc">One device, on the lock screen</string>
+    <string name="widget_lock_2_desc">Two devices side by side, on the lock screen</string>
 
     <string name="widget_settings_title">Widget settings</string>
     <string name="widget_settings_help">Tap a cell to choose what it shows. Auto cells fill in the device order below with the devices that are here; a device you pin keeps its cell, and its icon while it is away.</string>

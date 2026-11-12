@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+    Samsung's lock screen widgets (One UI): the system reads these by name from a widget's
+    "samsung.appwidget.monotone.info" meta-data. targetHost is a hex bit set (0x2: the lock screen) and
+    widgetSize the lock screen sizes offered (0x1: 1 x 1, 0x2: 2 x 1, 0x8: 2 x 2).
+    -->
+    <attr name="targetHost" format="integer" />
+    <attr name="widgetSize" format="integer" />
+</resources>

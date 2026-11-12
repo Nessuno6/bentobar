@@ -86,6 +86,13 @@ class Widget2 : StripWidget(2)
 class Widget3 : StripWidget(3)
 class Widget4 : StripWidget(4)
 
+/**
+ * The same, on One UI's lock screen: a widget there can't also be on the home screen (the system gives it the lock
+ * screen's category alone), so these are widgets of their own, in the lock screen's sizes.
+ */
+class LockWidget1 : StripWidget(1)
+class LockWidget2 : StripWidget(2)
+
 class CustomWidget : BaseWidget() {
     override fun grid(ctx: Context, id: Int, opts: Bundle) = WidgetStore.grid(ctx, id)
 }
@@ -118,6 +125,7 @@ object WidgetUpdater {
 
     val PROVIDERS: List<Class<out BaseWidget>> = listOf(
         MainWidget::class.java, Widget1::class.java, Widget2::class.java, Widget3::class.java, Widget4::class.java, CustomWidget::class.java,
+        LockWidget1::class.java, LockWidget2::class.java,
     )
 
     private val ROWS = intArrayOf(R.id.widget_row0, R.id.widget_row1, R.id.widget_row2, R.id.widget_row3)
