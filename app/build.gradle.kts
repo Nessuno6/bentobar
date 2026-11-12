@@ -13,7 +13,7 @@ android {
         minSdk = 34
         targetSdk = 37
         versionCode = 21
-        versionName = "1.7.1-notch.2"
+        versionName = "1.7.1-notch.3"
     }
 
     // Release signing from ~/.config/bentobar (never committed). Absent -> unsigned release build.

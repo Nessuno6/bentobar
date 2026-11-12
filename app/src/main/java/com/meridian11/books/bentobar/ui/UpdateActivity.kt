@@ -87,7 +87,10 @@ class UpdateActivity : ComponentActivity() {
                 )
             }
         }
-        if (savedInstanceState == null) start()
+        // The installer's answer can start this screen afresh: updating the app itself ends the old process, and the
+        // "installed" answer then reaches the new one. That's an answer to handle, not a new update to begin.
+        if (intent.action == ACTION_STATUS) handleStatus(intent)
+        else if (savedInstanceState == null) start()
     }
 
     private fun start() {
@@ -131,14 +134,21 @@ class UpdateActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action != ACTION_STATUS) return
+        if (intent.action == ACTION_STATUS) handleStatus(intent)
+    }
+
+    private fun handleStatus(intent: Intent) {
         when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 @Suppress("DEPRECATION")
                 val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
                 if (confirm != null) startActivity(confirm) else fail(R.string.updates_install_failed)
             }
-            PackageInstaller.STATUS_SUCCESS, PackageInstaller.STATUS_FAILURE_ABORTED -> finish()
+            PackageInstaller.STATUS_SUCCESS -> {
+                android.widget.Toast.makeText(this, R.string.updates_done, android.widget.Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            PackageInstaller.STATUS_FAILURE_ABORTED -> finish()
             PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> fail(R.string.updates_other_key)
             else -> fail(R.string.updates_install_failed)
         }

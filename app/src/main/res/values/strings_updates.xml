@@ -13,6 +13,7 @@
     <string name="updates_downloading">Downloading…</string>
     <string name="updates_installing">Installing. Android will ask you to confirm.</string>
     <string name="updates_try_again">Try again</string>
+    <string name="updates_done">BentoBar is updated</string>
     <string name="updates_no_apk">This release has no APK to download.</string>
     <string name="updates_download_failed">The download didn\'t finish. Check your connection and try again.</string>
     <string name="updates_install_failed">The installation didn\'t go through.</string>
