@@ -54,7 +54,7 @@ class FakeHttp : Transport {
             Http.clock = { System.nanoTime() / 1_000_000 }
             Http.transport = fake
             // As the app wires it: the switch and key are `Online`'s, and no item's code ever holds a key.
-            Http.key = { host -> Online.key(Online.serviceOf(host)).ifEmpty { null } }
+            Http.key = { host -> Online.serviceOrNull(host)?.let { Online.key(it).ifEmpty { null } } }
             Http.allowed = { true }
             Http.connected = { true }
             Http.onMain = { false }

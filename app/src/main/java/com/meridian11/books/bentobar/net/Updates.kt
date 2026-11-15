@@ -19,6 +19,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * This fork's update check: six times a day (every [PERIOD_MS], when there's a network), one GET of its own latest
@@ -38,18 +39,19 @@ object Updates {
     /** [apkPath]: the APK's path on [Host.GITHUB_RELEASES] ("/<owner>/<repo>/releases/download/<tag>/<name>.apk"). */
     data class Release(val version: String, val page: String, val apkPath: String?)
 
+    private val activeRequests = AtomicInteger(0)
+
     /** True only while [check] asks or [download] fetches: the gate's condition for GitHub's hosts. */
-    @Volatile var asking = false
-        private set
+    val asking: Boolean get() = activeRequests.get() > 0
 
     /** The release's APK into [into] (background thread only), through the gate like every request. */
     fun download(release: Release, into: java.io.File, progress: (Long, Long) -> Unit): Boolean {
         val path = release.apkPath ?: return false
-        asking = true
+        activeRequests.incrementAndGet()
         return try {
             Http.download(Request(Host.GITHUB_RELEASES, path), into, progress) is Reply.Ok
         } finally {
-            asking = false
+            activeRequests.decrementAndGet()
         }
     }
 
@@ -103,11 +105,11 @@ object Updates {
      */
     fun check(ctx: Context, notify: Boolean, manual: Boolean = false): Release? {
         if (!manual && !on(ctx)) return null
-        asking = true
+        activeRequests.incrementAndGet()
         val reply = try {
             Http.get(Request(Host.GITHUB, "/repos/$REPO/releases/latest"))
         } finally {
-            asking = false
+            activeRequests.decrementAndGet()
         }
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         p.edit().putLong("last", System.currentTimeMillis()).apply()
@@ -122,7 +124,7 @@ object Updates {
         return newer
     }
 
-    private fun parse(text: String): Release? = runCatching {
+    internal fun parse(text: String): Release? = runCatching {
         val o = Json.parseToJsonElement(text).jsonObject
         fun JsonObject.s(k: String) = this[k]?.jsonPrimitive?.contentOrNull
         val tag = o.s("tag_name") ?: return@runCatching null

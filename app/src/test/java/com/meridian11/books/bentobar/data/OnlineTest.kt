@@ -5,6 +5,7 @@ import com.meridian11.books.bentobar.data.Online.Service.OPEN_METEO
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -243,9 +244,14 @@ class OnlineTest {
 
     @Test fun eachHostBelongsToOneService() {
         // GitHub is no item's: only the fork's update check and its download ask it (net/Updates).
-        val itemHosts = com.meridian11.books.bentobar.net.Host.entries - setOf(com.meridian11.books.bentobar.net.Host.GITHUB,
+        val updateHosts = setOf(com.meridian11.books.bentobar.net.Host.GITHUB,
             com.meridian11.books.bentobar.net.Host.GITHUB_RELEASES, com.meridian11.books.bentobar.net.Host.GITHUB_ASSETS)
-        for (host in itemHosts) assertTrue(host in Online.serviceOf(host).hosts)
+        val itemHosts = com.meridian11.books.bentobar.net.Host.entries - updateHosts
+        for (host in itemHosts) {
+            assertTrue(host in Online.serviceOf(host).hosts)
+            assertEquals(Online.serviceOf(host), Online.serviceOrNull(host))
+        }
+        for (host in updateHosts) assertNull(Online.serviceOrNull(host))
         assertEquals(itemHosts.size, Online.Service.entries.sumOf { it.hosts.size })
     }
 }

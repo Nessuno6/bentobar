@@ -109,7 +109,7 @@ object Env {
         }
         Http.clock = Now::elapsed
         // The one read of a key for a request: the transport adds it, so no item's code ever holds one.
-        Http.key = { host -> Online.key(Online.serviceOf(host)).ifEmpty { null } }
+        Http.key = { host -> Online.serviceOrNull(host)?.let { Online.key(it).ifEmpty { null } } }
         Http.connected = {
             runCatching {
                 val cm = app.getSystemService(ConnectivityManager::class.java)

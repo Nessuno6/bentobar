@@ -274,4 +274,14 @@ class HttpTest {
         // Unvalidated is fine: some working networks fail Android's own check.
         assertTrue(Http.usable(hasNetwork = true, captivePortal = false))
     }
+
+    @Test fun githubUpdateHostDoesNotRequireAnOnlineService() {
+        val releasesPath = "/repos/Nessuno6/bentobar/releases/latest"
+        fake.reply(Host.GITHUB, releasesPath, """{"tag_name":"v2.2.1-notch.3"}""")
+        // Even if Http.key only knows Online services, asking Host.GITHUB must neither look up a service nor throw.
+        Http.key = { host -> com.meridian11.books.bentobar.data.Online.serviceOrNull(host)?.name }
+        val reply = Http.get(Request(Host.GITHUB, releasesPath))
+        assertTrue(reply is Reply.Ok)
+        assertEquals(1, Http.sent(Host.GITHUB))
+    }
 }

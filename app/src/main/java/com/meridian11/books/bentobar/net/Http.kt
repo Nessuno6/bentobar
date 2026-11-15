@@ -142,8 +142,8 @@ object Http {
         if (request.host.keyName != null && key(request.host).isNullOrEmpty()) return Reply.Failed(Why.OFF, sent = false)
         // Before anything is counted as sent: the counter must not say requests left when the transport would refuse them.
         if (HttpTransport.address(request) == null) { log("GET $request refused: not a plain path"); return Reply.Failed(Why.REFUSED, sent = false) }
-        val service = Online.serviceOf(request.host).ordinal
-        held(service, request.toString())?.let { return it }
+        val service = Online.serviceOrNull(request.host)?.ordinal
+        if (service != null) held(service, request.toString())?.let { return it }
         counts.incrementAndGet(request.host.ordinal)
         val reply = try {
             transport.get(request)
@@ -152,7 +152,7 @@ object Http {
             Reply.Failed(Why.UNREADABLE)
         }
         log("GET $request -> $reply")
-        if (reply is Reply.Failed) noteWait(service, reply)
+        if (service != null && reply is Reply.Failed) noteWait(service, reply)
         return reply
     }
 

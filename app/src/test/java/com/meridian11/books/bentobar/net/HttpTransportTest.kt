@@ -166,4 +166,15 @@ class HttpTransportTest {
             }
         } finally { Http.key = { null } }
     }
+
+    @Test fun keylessHostsNeverInvokeHttpKeyInTransport() {
+        Http.key = { host -> throw AssertionError("unexpected key lookup for $host") }
+        try {
+            TinyServer { TinyServer.Answer("""{"tag_name":"v2.2.1-notch.3"}""") }.use { server ->
+                val reply = server.transport().get(Request(Host.GITHUB, "/repos/Nessuno6/bentobar/releases/latest"))
+                assertTrue(reply is Reply.Ok)
+                assertEquals("/repos/Nessuno6/bentobar/releases/latest", server.seen.single().path)
+            }
+        } finally { Http.key = { null } }
+    }
 }

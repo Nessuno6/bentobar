@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1-notch.3 (2026-11-15)
+
+- **Fixed crash when checking for updates (`Updates` / `Http` / `Online`):**
+  - Added `Online.serviceOrNull(host)` so requests to non-service hosts (`Host.GITHUB` for release checks) no longer throw `NoSuchElementException` inside `Http.get` rate-limit tracking, `Http.key`, or `HttpTransport.get`.
+  - Updated `HttpTransport.get` to only look up `Http.key(host)` when `host.keyName != null`, replaced `Updates.asking` boolean with an atomic in-flight counter, and guarded the manual `Check now` background thread in `SetupPage`.
+
 ## 2.2.1-notch.2 (2026-11-15)
 
 - **Hardened cross-device battery link (`LinkActivity` & `Link`):**

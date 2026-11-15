@@ -198,10 +198,15 @@ private fun UpdatesRow(activity: Activity) {
             checking.value = true
             status.value = null
             Thread({
-                val newer = com.meridian11.books.bentobar.net.Updates.check(activity, notify = false, manual = true)
-                val gotNoAnswer = com.meridian11.books.bentobar.net.Updates.lastFailed
+                val (newer, gotNoAnswer) = try {
+                    com.meridian11.books.bentobar.net.Updates.check(activity, notify = false, manual = true) to
+                        com.meridian11.books.bentobar.net.Updates.lastFailed
+                } catch (_: Throwable) {
+                    null to true
+                }
                 activity.runOnUiThread {
                     checking.value = false
+                    if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                     when {
                         newer != null -> activity.startActivity(UpdateActivity.intent(activity, newer))
                         gotNoAnswer -> status.value = failed

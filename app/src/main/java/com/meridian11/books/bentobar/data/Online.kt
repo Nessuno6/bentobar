@@ -91,6 +91,9 @@ object Online {
     /** The item service a host belongs to. Every host but [Host.GITHUB] (the fork's update check, net/Updates) has one. */
     fun serviceOf(host: Host): Service = Service.entries.first { host in it.hosts }
 
+    /** The item service a host belongs to, or null when the host isn't an item service (such as the update hosts). */
+    fun serviceOrNull(host: Host): Service? = Service.entries.firstOrNull { host in it.hosts }
+
     /**
      * Whether [service] may be asked right now: it is switched on for this install, something that shows items is on
      * screen ([running]), and the layout has an item of a type that asks it ([asks], by the item's type). The one rule
