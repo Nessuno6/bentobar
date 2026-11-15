@@ -157,7 +157,7 @@ class HereRulesTest {
         assertEquals(35 * min, HereRules.FIX_MS)
     }
 
-    @Test fun whereTheDeviceIsIsWantedForAnItemOfMyLocationOutsideOffWhileTheSwitchIsOn() {
+    @Test fun whereTheDeviceIsIsWantedForAnItemOfMyLocationWhileTheSwitchIsOn() {
         val here = WeatherRules.useHere(ItemConfig("w1", "weather"))
         val city = ItemConfig("w2", "weather", options = mapOf("city" to "Zurich", "lat" to "47.37", "lon" to "8.55"))
         assertTrue(HereRules.wanted(listOf(here, city), on = true))
@@ -166,20 +166,8 @@ class HereRulesTest {
         // The last item of My location goes, or turns back to its city.
         assertFalse(HereRules.wanted(listOf(city), on = true))
         assertFalse(HereRules.wanted(listOf(WeatherRules.useCity(here), city), on = true))
-        // Or goes to Off: it keeps its choice, and where the device is is found again when it comes back.
-        assertFalse(HereRules.wanted(listOf(here.copy(section = Section.OFF), city), on = true))
-    }
-
-    @Test fun androidsLocationQuestionIsAskedOnlyForALayoutWithAnItemOfMyLocation() {
-        val here = WeatherRules.useHere(ItemConfig("w1", "weather"))
-        val city = ItemConfig("w2", "weather", options = mapOf("city" to "Zurich", "lat" to "47.37", "lon" to "8.55"))
-        // What another app's intent to the settings window would ask for: nothing chose My location.
-        assertFalse(HereRules.mayAsk(emptyList()))
-        assertFalse(HereRules.mayAsk(listOf(city)))
-        assertFalse(HereRules.mayAsk(listOf(ItemConfig("f1", "flight", options = mapOf("where" to "here")))))
-        // Use my location, and Allow location in the menu or the settings, an item in Off included.
-        assertTrue(HereRules.mayAsk(listOf(city, here)))
-        assertTrue(HereRules.mayAsk(listOf(here.copy(section = Section.OFF))))
+        // Hidden, it is wanted all the same: its rule may bring it out.
+        assertTrue(HereRules.wanted(listOf(here.copy(section = Section.HIDDEN), city), on = true))
     }
 
     @Test fun nothingPrintsWhereTheDeviceIs() {

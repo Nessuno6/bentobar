@@ -1,6 +1,5 @@
 package com.meridian11.books.bentobar.items
 
-import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.ActivityNotFoundException
@@ -23,10 +22,11 @@ import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import com.meridian11.books.bentobar.BuildConfig
 import com.meridian11.books.bentobar.R
+import com.meridian11.books.bentobar.bar.BarService
 import com.meridian11.books.bentobar.data.Online
-import com.meridian11.books.bentobar.data.Section
 import com.meridian11.books.bentobar.data.Store
 import com.meridian11.books.bentobar.net.Http
+import com.meridian11.books.bentobar.util.Now
 
 /**
  * Process-wide context for items: the app context, the accessibility service while it runs,
@@ -37,8 +37,8 @@ object Env {
     const val TAG = "BentoBar"
     lateinit var app: Context private set
 
-    /** The running accessibility service (global actions, overlay windows), or null. */
-    @Volatile var service: AccessibilityService? = null
+    /** Whether the accessibility service is connected. The service itself stays inside bar/: items never hold it. */
+    val running: Boolean get() = BarService.current != null
 
     val net = NetSampler()
     val cpu = CpuSampler()
@@ -50,6 +50,24 @@ object Env {
     fun init(context: Context) {
         if (::app.isInitialized) return
         app = context.applicationContext
+        // The words of Fmt's formats, from the app's text: read each time, so a change of language is followed.
+        com.meridian11.books.bentobar.util.Fmt.words = com.meridian11.books.bentobar.util.Fmt.Words(
+            percent = { str(R.string.common_percent, it) },
+            byteUnit = { app.resources.getStringArray(R.array.fmt_units_bytes)[it] },
+            rateUnit = { app.resources.getStringArray(R.array.fmt_units_rate)[it] },
+            daysHours = { d, h -> str(R.string.fmt_days_hours, d, h) },
+            hoursMinutes = { h, m -> str(R.string.fmt_hours_minutes, h, m) },
+            minutes = { str(R.string.fmt_minutes, it) },
+            seconds = { str(R.string.fmt_seconds, it) },
+            aloud = { d, h, m, s ->
+                val parts = listOfNotNull(
+                    (d.takeIf { it > 0 })?.let { plural(R.plurals.common_days, it.toInt()) },
+                    (h.takeIf { it > 0 })?.let { plural(R.plurals.common_hours, it.toInt()) },
+                    (m.takeIf { it > 0 })?.let { plural(R.plurals.common_minutes, it.toInt()) },
+                    (s.takeIf { it > 0 || (d == 0L && h == 0L && m == 0L) })?.let { plural(R.plurals.common_seconds, it.toInt()) })
+                parts.reduce { a, b -> str(R.string.fmt_spoken_pair, a, b) }
+            },
+        )
         Store.init(app)
         // The switches for the three online services and the user's keys: in the no-backup directory, which
         // Android leaves out of backups and device transfers. Then the rules for going online at all.
@@ -63,7 +81,7 @@ object Env {
         NowPlaying.init(app)
         // Before Timers: a timer that finished while BentoBar wasn't running ends in init, and its
         // chip update asks the calendar.
-        Calendar.init(app)
+        Calendar.init(app) { Ticker.refresh(EventItem.type) }
         com.meridian11.books.bentobar.util.Fonts.init(app)
         Timers.init(app)
         Caffeine.init(app)
@@ -71,22 +89,30 @@ object Env {
 
     /**
      * When BentoBar may ask an online service, in one place. A request goes out only if all of this
-     * holds: the service is switched on for this install (the user set its item up here), an item of
-     * a type that uses the service is outside Off, and something that shows items is on screen. And
+     * holds: the service is switched on for this install (the user set its item up here), the layout has an item
+     * of a type that uses the service, and something that shows items is on screen. And
      * never from the main thread, and not at all without a network.
      */
     private fun wireOnline() {
+        fun mayAsk(service: Online.Service) = Online.mayAsk(service, Ticker.running, Store.config.value.items) { Items.of(it)?.online }
         Http.allowed = allowed@{ host ->
             // GitHub: only this fork's own update check and its download, while one runs (net/Updates): the scheduled
             // check while it is switched on, Setup's Check now and an update the user started when they ask.
             if (host == com.meridian11.books.bentobar.net.Host.GITHUB || host == com.meridian11.books.bentobar.net.Host.GITHUB_RELEASES ||
                 host == com.meridian11.books.bentobar.net.Host.GITHUB_ASSETS)
                 return@allowed com.meridian11.books.bentobar.net.Updates.asking
-            val service = Online.serviceOf(host)
-            Online.on(service) && Ticker.running &&
-                Store.config.value.items.any { it.section != Section.OFF && Items.of(it.type)?.online == service }
+            mayAsk(Online.serviceOf(host))
         }
-        Http.connected = { runCatching { app.getSystemService(ConnectivityManager::class.java)?.activeNetwork != null }.getOrDefault(true) }
+        Http.clock = Now::elapsed
+        // The one read of a key for a request: the transport adds it, so no item's code ever holds one.
+        Http.key = { host -> Online.key(Online.serviceOf(host)).ifEmpty { null } }
+        Http.connected = {
+            runCatching {
+                val cm = app.getSystemService(ConnectivityManager::class.java)
+                val network = cm?.activeNetwork
+                Http.usable(network != null, network?.let { cm.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL) } == true)
+            }.getOrDefault(true)
+        }
         Http.onMain = { android.os.Looper.myLooper() == android.os.Looper.getMainLooper() }
         // The host, the path and what came of it, in debug builds only; never a query (a key, a city) and never a reply.
         if (BuildConfig.DEBUG) Http.log = { Log.i(TAG, it) }
@@ -136,7 +162,11 @@ object Env {
     fun plural(@PluralsRes id: Int, count: Int, vararg args: Any): String =
         if (args.isEmpty()) app.resources.getQuantityString(id, count, count) else app.resources.getQuantityString(id, count, *args)
 
-    fun global(action: Int): Boolean = service?.performGlobalAction(action) ?: false
+    fun global(action: Int): Boolean = BarService.global(action)
+
+    fun closeSharedItem() = BarService.closeSharedItem()
+    fun openSharedItem(id: String, at: android.graphics.Rect, hover: Boolean): Boolean =
+        BarService.openSharedItem(id, at, hover)
 
     /** Puts [text] on the clipboard (a flight's status, the times of a planned moment). */
     fun copy(text: String) {
@@ -200,8 +230,17 @@ class NetSampler {
         val rx = TrafficStats.getTotalRxBytes()
         val tx = TrafficStats.getTotalTxBytes()
         if (rx == TrafficStats.UNSUPPORTED.toLong() || tx == TrafficStats.UNSUPPORTED.toLong()) return
+        reading(rx, tx, now)
+    }
+
+    /**
+     * The device's byte counters at [now]. Too soon after the last reading ([MIN_GAP_MS]) a counter step says nothing: 5 KB in
+     * 10 ms would read as the 500 KB/s that makes the Network item pop out. It is left for the next reading to measure.
+     */
+    internal fun reading(rx: Long, tx: Long, now: Long) {
         rxTotal = rx; txTotal = tx
-        if (lastRx >= 0 && now > lastAt) {
+        if (lastRx >= 0 && now - lastAt < MIN_GAP_MS) return
+        if (lastRx >= 0) {
             val dt = (now - lastAt) / 1000.0
             // Counters can reset (interface restarts): treat drops as zero.
             down = ((rx - lastRx).coerceAtLeast(0)) / dt
@@ -212,6 +251,8 @@ class NetSampler {
         }
         lastRx = rx; lastTx = tx; lastAt = now
     }
+
+    private companion object { const val MIN_GAP_MS = 500L }
 
     /** "Wi-Fi", "Ethernet", … plus metered state, from the default network. */
     fun describe(context: Context): String = runCatching { describeOrThrow(context) }.getOrDefault(context.getString(R.string.network_menu_title))
@@ -239,8 +280,9 @@ class NetSampler {
 /**
  * Device-wide CPU load. Apps can't read /proc/stat (Android 8+) and SystemHealthManager's CPU
  * headroom is unsupported on Googlebooks, but each core's idle-state residency in sysfs
- * (cpuN/cpuidle/stateM/time, microseconds) is readable: load = 1 − idle time / wall time.
- * Also reads each cluster's clock (cpufreq) and, on Qualcomm, the GPU's busy counter.
+ * (cpuN/cpuidle/stateM/time, microseconds) is readable: load = 1 − idle time / wall time, read as [CpuLoad] says
+ * (the counters move only when a core wakes). Also reads each cluster's clock (cpufreq) and, on Qualcomm, the GPU's
+ * busy counter.
  */
 class CpuSampler {
     private val root = java.io.File("/sys/devices/system/cpu")
@@ -249,14 +291,13 @@ class CpuSampler {
     private var idleFiles: Array<Array<java.io.RandomAccessFile>> = emptyArray()
     private var policies: List<Pair<String, java.io.File>> = emptyList()
     private var maxKhz: List<Long> = emptyList()
-    private var lastIdle = LongArray(0)
-    private var lastAt = 0L
+    private var load = CpuLoad(0)
     private var initialised = false
     private val buf = ByteArray(32)
     /** False when this device doesn't expose idle-state counters. */
     var available = true; private set
-    var total = 0.0; private set
-    var perCore = DoubleArray(0); private set
+    val total get() = load.total
+    val perCore: DoubleArray get() = load.perCore
     val history = History()
     val gpuHistory = History()
     /** GPU busy fraction, or null when the device doesn't expose it. */
@@ -292,6 +333,7 @@ class CpuSampler {
             }.toTypedArray()
         }
         available = idleFiles.isNotEmpty() && idleFiles.all { it.isNotEmpty() }
+        load = CpuLoad(cores.size)
         // Clock domains (policies) are fixed: find them once.
         policies = (0 until 32).mapNotNull { p ->
             val dir = java.io.File(root, "cpufreq/policy$p")
@@ -309,16 +351,7 @@ class CpuSampler {
         if (!available) return
         val t = android.os.SystemClock.elapsedRealtimeNanos() / 1000
         val idle = LongArray(cores.size) { i -> var sum = 0L; for (f in idleFiles[i]) sum += runCatching { readLong(f) }.getOrDefault(0L); sum }
-        if (lastAt > 0) {
-            val dt = (t - lastAt).toDouble()
-            if (dt in 200_000.0..10_000_000.0) {
-                perCore = DoubleArray(cores.size) { i -> (1 - (idle[i] - lastIdle[i]) / dt).coerceIn(0.0, 1.0) }
-                total = perCore.average()
-                history.add(total)
-            }
-        }
-        lastIdle = idle
-        lastAt = t
+        if (load.add(t, idle)) history.add(load.total)
         if (detail > 0) {
             clusters = policies.mapIndexed { i, (span, f) -> Cluster(span, readLong(f) ?: 0L, maxKhz[i]) }
             gpu = runCatching {

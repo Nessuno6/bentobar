@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
  * Cross device SDK. Google Play services find the device (the picker lists the user's own devices, signed in to the same
  * account), wake BentoBar on it with [ACTION_WAKE] and carry the messages, encrypted; BentoBar opens nothing of its own.
  *
- * While linked, each side sends its battery and the devices it shows ([LinkRules]) at once and every half minute, and
+ * While linked, each side sends its battery and the devices it shows ([DeviceLinkRules]) at once and every half minute, and
  * shows what the other sent. The link lasts while both processes do: once it drops, Device batteries offers to link
  * again (the picker, one tap). Nothing is kept on the device, and no name is logged.
  */
@@ -39,7 +39,7 @@ object Link {
     private val main = Handler(Looper.getMainLooper())
 
     @Volatile private var connection: RemoteConnection? = null
-    @Volatile private var status: LinkRules.Status? = null
+    @Volatile private var status: DeviceLinkRules.Status? = null
     @Volatile private var statusAt = 0L
     /** The device last linked, as Google names it: kept after the link drops, for "Link to … again". */
     @Volatile var peer: String? = null; private set
@@ -51,8 +51,8 @@ object Link {
     /** The other side's devices as rows of Device batteries, besides [own]; none while not linked or when it went quiet. */
     fun devices(own: List<Device>): List<Device> {
         val s = status ?: return emptyList()
-        if (!linked || SystemClock.elapsedRealtime() - statusAt > LinkRules.STALE_MS) return emptyList()
-        return LinkRules.incoming(s, own)
+        if (!linked || SystemClock.elapsedRealtime() - statusAt > DeviceLinkRules.STALE_MS) return emptyList()
+        return DeviceLinkRules.incoming(s, own)
     }
 
     /** The picker's question, for `ui/LinkActivity`: the user's other devices, the one picked woken with [ACTION_WAKE]. */
@@ -119,15 +119,15 @@ object Link {
         override fun run() {
             val c = connection ?: return
             if (c.isClosed) return dropped(c)
-            val text = runCatching { LinkRules.encode(own()) }.getOrNull()
+            val text = runCatching { DeviceLinkRules.encode(own()) }.getOrNull()
             if (text != null) scope.launch { c.send(text.toByteArray()) }
-            main.postDelayed(this, LinkRules.EVERY_MS)
+            main.postDelayed(this, DeviceLinkRules.EVERY_MS)
         }
     }
 
     private val receiver = object : ConnectionReceiver {
         override fun onMessageReceived(remoteConnection: RemoteConnection, payload: ByteArray) {
-            val got = LinkRules.decode(String(payload)) ?: return
+            val got = DeviceLinkRules.decode(String(payload)) ?: return
             main.post {
                 if (remoteConnection !== connection) return@post
                 // The home screen widgets show the other side too: they hear of what changed in it.
@@ -153,7 +153,7 @@ object Link {
     }
 
     /** This side's status: its own battery, its name and kind, and the devices Device batteries found here. */
-    private fun own(): LinkRules.Status {
+    private fun own(): DeviceLinkRules.Status {
         val app = Env.app
         val battery = app.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = battery?.let { b ->
@@ -169,7 +169,7 @@ object Link {
         val kind = if (app.resources.configuration.smallestScreenWidthDp >= 600) DevicesRules.Kind.TABLET else DevicesRules.Kind.PHONE
         val speed = battery?.takeIf { plugged && it.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0 }
             ?.let { ChargeSpeed.of(it.getIntExtra("charger_type", 0), it.getBooleanExtra("hv_charger", false)) }
-        return LinkRules.Status(LinkRules.Battery(kind, name, level, plugged, speed = speed), LinkRules.outgoing(DevicesItem.found()))
+        return DeviceLinkRules.Status(DeviceLinkRules.Battery(kind, name, level, plugged, speed = speed), DeviceLinkRules.outgoing(DevicesItem.found()))
     }
 
     /** The test hook: whether linked, and what the other side sent (kinds and levels, no names). */

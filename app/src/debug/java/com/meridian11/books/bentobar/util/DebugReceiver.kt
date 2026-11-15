@@ -7,10 +7,14 @@ import android.util.Log
 import com.meridian11.books.bentobar.bar.BarService
 import com.meridian11.books.bentobar.data.Defaults
 import com.meridian11.books.bentobar.data.Online
+import com.meridian11.books.bentobar.data.Position
 import com.meridian11.books.bentobar.data.Section
 import com.meridian11.books.bentobar.data.Store
+import com.meridian11.books.bentobar.data.putAllIn
+import com.meridian11.books.bentobar.data.putInArea
 import com.meridian11.books.bentobar.items.Caffeine
 import com.meridian11.books.bentobar.items.Env
+import com.meridian11.books.bentobar.items.ItemType
 import com.meridian11.books.bentobar.items.Items
 import com.meridian11.books.bentobar.items.Ticker
 import com.meridian11.books.bentobar.items.Timers
@@ -33,22 +37,30 @@ class DebugReceiver : BroadcastReceiver() {
         Env.init(context)
         val args = intent.getStringExtra("c").orEmpty().trim().split(Regex("\\s+"))
         if (args[0] == "winshot") return winshot(args.drop(1).joinToString(" ").ifEmpty { "BentoBar menu" })
-        val bar = (Env.service as? BarService)?.controller()
+        val bar = BarService.current?.controller()
         val out = try {
             when (args[0]) {
+                // Every window's id, type, title and place. Here, in the debug source set only: the release app reads no window's title
+                // but one (see BarService.check), and a test pins that.
+                "windows" -> (BarService.current ?: error("service not running")).windows.joinToString(" | ") { w ->
+                    val r = android.graphics.Rect().also { w.getBoundsInScreen(it) }
+                    "${w.id}:t${w.type}:${w.title}:${r.toShortString()}"
+                }
                 "cfg" -> Store.export()
                 "import" -> { // a whole layout, base64 JSON (e.g. to restore one saved with cfg)
                     val json = String(android.util.Base64.decode(args[1], android.util.Base64.DEFAULT))
-                    if (Store.import(json)) "imported" else "not a BentoBar layout"
+                    if (Store.import(json) is com.meridian11.books.bentobar.data.LayoutRead.Ok) "imported" else "not a BentoBar layout"
                 }
                 "reset" -> { Store.update { Defaults.config().copy(onboarded = it.onboarded) }; "reset" }
-                "add" -> Store.add(args[1], args.getOrNull(2)?.let { Section.valueOf(it.uppercase()) } ?: Section.SHOWN)
+                // add TYPE [section] [area]: with no area, the layout's home area.
+                "add" -> Store.add(args[1], args.getOrNull(2)?.let { Section.valueOf(it.uppercase()) } ?: Section.SHOWN, area = args.getOrNull(3)?.let { area(it) })
                 "remove" -> { Store.remove(args[1]); "ok" }
                 "set" -> {
                     val (k, v) = args[2].split('=', limit = 2)
                     val item = Store.config.value.items.firstOrNull { it.id == args[1] || it.type == args[1] } ?: error("no item")
                     when (k) {
                         "section" -> Store.updateItem(item.id) { it.copy(section = Section.valueOf(v.uppercase())) }
+                        "area" -> Store.update { it.putInArea(item.id, area(v)) }
                         "whenActive" -> Store.updateItem(item.id) { it.copy(whenActive = v.toBoolean()) }
                         "display" -> Store.updateItem(item.id) { it.copy(display = com.meridian11.books.bentobar.data.Display.valueOf(v.uppercase())) }
                         else -> Store.updateItem(item.id) { it.with(k, v.ifEmpty { null }) }
@@ -58,11 +70,15 @@ class DebugReceiver : BroadcastReceiver() {
                 "cpuprobe" -> { // which CPU-load sources this app may read
                     val out = StringBuilder()
                     val shm = context.getSystemService(android.os.health.SystemHealthManager::class.java)
-                    runCatching {
+                    // Debug builds only (this file is not in release); the headroom calls are API 36 and minSdk is 34, so on an
+                    // older device they throw and runCatching reports that, which is the probe's answer.
+                    @android.annotation.SuppressLint("NewApi")
+                    val cpu = runCatching {
                         out.append("minInterval=${shm.cpuHeadroomMinIntervalMillis} window=${shm.cpuHeadroomCalculationWindowRange} ")
                         out.append("cpuHeadroom=${shm.getCpuHeadroom(android.os.CpuHeadroomParams.Builder().build())} ")
                     }.onFailure { out.append("cpuHeadroom=$it ") }
-                    runCatching { out.append("gpuHeadroom=${shm.getGpuHeadroom(android.os.GpuHeadroomParams.Builder().build())} ") }
+                    @android.annotation.SuppressLint("NewApi") // as above
+                    val gpu = runCatching { out.append("gpuHeadroom=${shm.getGpuHeadroom(android.os.GpuHeadroomParams.Builder().build())} ") }
                         .onFailure { out.append("gpuHeadroom=$it ") }
                     val extra = (args.getOrNull(1)?.split(",") ?: emptyList())
                     for (f in listOf("/proc/stat", "/proc/loadavg", "/proc/uptime", "/proc/pressure/cpu", "/sys/devices/system/cpu/present",
@@ -91,7 +107,9 @@ class DebugReceiver : BroadcastReceiver() {
                 "net" -> { // how many requests went out, per host, and whether each service may be asked right now
                     if (args.getOrNull(1) == "reset") Http.resetCounts()
                     Host.entries.joinToString(" ") { "${it.domain}=${Http.sent(it)}" } + " | " +
-                        Online.Service.entries.joinToString(" ") { s -> "${s.id}: on=${Online.on(s)} setUp=${Online.setUp(s)} mayAsk=${Http.allowed(s.hosts.first())}" }
+                        Online.Service.entries.joinToString(" ") { s ->
+                            "${s.id}: on=${Online.on(s)} setUp=${Online.setUp(s)} mayAsk=${Http.allowed(s.hosts.first())}"
+                        }
                 }
                 "online" -> { // online weather|flights|stocks|fx on|off (on only works once the item was set up here, as in Setup)
                     val s = when (args[1]) {
@@ -102,14 +120,14 @@ class DebugReceiver : BroadcastReceiver() {
                     "${s.id} on=${Online.on(s)}"
                 }
                 // `on <display id> <command>`: a strip on another display's taskbar.
-                "on" -> (Env.service as? BarService)?.controller(args.getOrNull(1)?.toIntOrNull() ?: -1)?.debug(args.drop(2)) ?: "no strip on that display"
-                "item" -> Items.of(args[1])?.debug(args.drop(2)) ?: "no hook for ${args.drop(1).joinToString(" ")}"
+                "on" -> BarService.current?.controller(args.getOrNull(1)?.toIntOrNull() ?: -1)?.debug(args.drop(2)) ?: "no strip on that display"
+                "item" -> Items.of(args[1])?.let { ask(it, args.drop(2)) } ?: "no hook for ${args.drop(1).joinToString(" ")}"
                 "finish" -> { com.meridian11.books.bentobar.ui.MainActivity.current?.finish(); "ok" }
                 "bar" -> { Store.update { it.copy(enabled = args.getOrNull(1) != "off") }; "ok" }
                 "look" -> {
                     Store.update { c ->
                         when (args[1]) {
-                            "position" -> c.copy(position = com.meridian11.books.bentobar.data.Position.valueOf(args[2].uppercase()))
+                            "position" -> c.putAllIn(area(args[2])) // every item into one area, which is what a Position was
                             "pill" -> c.copy(pill = com.meridian11.books.bentobar.data.Pill.valueOf(args[2].uppercase()))
                             "color" -> c.copy(color = com.meridian11.books.bentobar.data.ColorMode.valueOf(args[2].uppercase()))
                             "size" -> c.copy(textSize = com.meridian11.books.bentobar.data.TextSize.valueOf(args[2].uppercase()))
@@ -133,12 +151,24 @@ class DebugReceiver : BroadcastReceiver() {
                 "pomodoro" -> { Timers.startPomodoro(); "ok" }
                 "stop" -> { Timers.stop(); "ok" }
                 "awake" -> { if (args.getOrNull(1) == "off") Caffeine.off() else Caffeine.on(args.getOrNull(1)?.toIntOrNull()); "ok" }
-                else -> Items.of(args[0])?.debug(args.drop(1)) ?: bar?.debug(args) ?: "bar not running"
+                else -> Items.of(args[0])?.let { ask(it, args.drop(1)) } ?: bar?.debug(args) ?: "bar not running"
             }
         } catch (e: Exception) {
             "failed: $e"
         }
         Log.i("BentoBar", "debug ${args.joinToString(" ")} -> $out")
+    }
+
+    /** What the type's hook says to [words], or, for a state it refused, what it can stage: a hook answers null, and the usage is said here. */
+    private fun ask(type: ItemType, words: List<String>): String? = type.debug(words)
+        ?: type.stages.takeIf { it.isNotEmpty() }?.let { "not staged: no such state, or no such item. It takes: ${it.joinToString(" | ")}" }
+
+    /** An area by the word the user reads; "center" is the stored name, which older scripts send. */
+    private fun area(word: String): Position = when (word.lowercase()) {
+        "left" -> Position.LEFT
+        "middle", "center" -> Position.CENTER
+        "right" -> Position.RIGHT
+        else -> error("left, middle or right")
     }
 
     /** "+3h", "+90m", "-45s" as milliseconds. */
@@ -157,7 +187,7 @@ class DebugReceiver : BroadcastReceiver() {
      * mouse pointer, and never show other apps.
      */
     private fun winshot(title: String) {
-        val svc = Env.service ?: run { resultData = "service not running"; return }
+        val svc = BarService.current ?: run { resultData = "service not running"; return }
         // The settings window (its own surface, without the caption), found by its title: no other
         // app's window content is read to find it.
         val label = svc.applicationInfo.loadLabel(svc.packageManager).toString()

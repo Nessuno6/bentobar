@@ -1,33 +1,22 @@
 package com.meridian11.books.bentobar.bar
 
+import android.accessibilityservice.AccessibilityService
+import android.graphics.Bitmap
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import java.util.concurrent.Executors
+
+/** Android's rectangle as a plain [Box], and back. */
+internal fun Rect.box() = Box(left, top, right, bottom)
+internal fun Box.rect() = Rect(left, top, right, bottom)
 
 /**
- * Where the status bar is and which part of it is free, read from SystemUI's status bar window
- * in the accessibility tree. This is the only window BentoBar ever reads; app windows are skipped.
+ * Reads the accessibility tree into plain facts for [BarRules]. The status bar is the only window whose content is
+ * read (SystemUI's status bar window, as [BarNode]s, which become a [BarSnapshot]); of any other window, only its kind,
+ * its id and where it is ([WindowFact]).
  */
-data class BarSnapshot(
-    /** The status bar window's id, for window screenshots (colour sampling). */
-    val windowId: Int,
-    val bar: Rect,
-    /** Empty space BentoBar may use: the desktop bar's spacer, or the widest gap between items. */
-    val free: Rect,
-    /** The clock text, whose colour BentoBar copies. */
-    val clock: Rect?,
-    /** A short fingerprint of the bar's items, for logs. */
-    val summary: String,
-    /** The desktop bar's spacer node: refreshing just this is a cheap "did anything move?" check. */
-    val spacerNode: AccessibilityNodeInfo? = null,
-    /** Where [spacerNode] was at the scan. It is [free] unless the spacer had no width left. */
-    val spacer: Rect? = null,
-)
-
 object StatusBarScan {
-    /** [BarSnapshot.summary] when the window had no node tree to read: its free area is unknown. */
-    const val NO_TREE = "no-tree"
-
     /**
      * A see-through panel over the whole screen and past it on every side (found on a Samsung tablet: the edge panel,
      * 28 px past each edge). With it open the window list holds it and the navigation bar only, no status bar,
@@ -36,46 +25,38 @@ object StatusBarScan {
      */
     fun overhangs(left: Int, top: Int, right: Int, bottom: Int, screenW: Int, screenH: Int): Boolean =
         left < 0 && top < 0 && right > screenW && bottom > screenH
-    private val timeRe = Regex("""\d{1,2}[:.]\d{2}""")
 
-    /** The status bar window: a system window along the top edge, shorter than [maxHeight]. */
-    fun findWindow(windows: List<AccessibilityWindowInfo>, screenWidth: Int, maxHeight: Int): AccessibilityWindowInfo? =
-        windows.firstOrNull { w ->
-            val r = Rect().also { w.getBoundsInScreen(it) }
-            w.type == AccessibilityWindowInfo.TYPE_SYSTEM && r.top == 0 && r.height() in 1..maxHeight && r.width() >= screenWidth / 2
+    /** What a scan brings back: the plain [snapshot], and the live spacer node (a cheap "did anything move?" check for [BarController]). */
+    class Scanned(val snapshot: BarSnapshot, val spacerNode: AccessibilityNodeInfo?)
+
+    /** What [BarRules] may know of [w]: its kind, its id and where it is. */
+    fun fact(w: AccessibilityWindowInfo): WindowFact {
+        val kind = when (w.type) {
+            AccessibilityWindowInfo.TYPE_SYSTEM -> WindowFact.Kind.SYSTEM
+            AccessibilityWindowInfo.TYPE_APPLICATION -> WindowFact.Kind.APPLICATION
+            AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY -> WindowFact.Kind.OVERLAY
+            else -> WindowFact.Kind.OTHER
         }
+        return WindowFact(w.id, kind, Rect().also { w.getBoundsInScreen(it) }.box())
+    }
 
-    fun scan(w: AccessibilityWindowInfo): BarSnapshot {
-        val bar = Rect().also { w.getBoundsInScreen(it) }
+    fun scan(w: AccessibilityWindowInfo): Scanned {
+        val bar = Rect().also { w.getBoundsInScreen(it) }.box()
         // One round trip: prefetch the (small, ~35 node) tree instead of an IPC per getChild().
-        val root = w.getRoot(AccessibilityNodeInfo.FLAG_PREFETCH_DESCENDANTS_DEPTH_FIRST or
-            AccessibilityNodeInfo.FLAG_PREFETCH_UNINTERRUPTIBLE) ?: return BarSnapshot(w.id, bar, Rect(bar), null, NO_TREE)
-        var spacer: Rect? = null
+        val root = root(w) ?: return Scanned(BarRules.parse(w.id, bar, emptyList()), null)
         var spacerNode: AccessibilityNodeInfo? = null
-        var clock: Rect? = null
-        val parts = ArrayList<Rect>()
-        val names = StringBuilder()
+        val nodes = ArrayList<BarNode>()
         val stack = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
         stack.add(root to 0)
-        var visited = 0
-        while (stack.isNotEmpty() && visited < 400) {
+        while (stack.isNotEmpty() && nodes.size < 400) {
             val (n, depth) = stack.removeLast()
-            visited++
-            val r = Rect().also { n.getBoundsInScreen(it) }
             val id = n.viewIdResourceName.orEmpty()
-            if (id.endsWith("DesktopStatusBarSpacer")) { spacer = Rect(r); spacerNode = n }
-            val text = n.text?.toString().orEmpty()
-            if (clock == null && text.isNotEmpty() && timeRe.containsMatchIn(text)) clock = Rect(r)
-            // Leaf-ish pieces that take room: anything clickable or labelled that isn't the whole bar.
-            val labelled = n.isClickable || !n.contentDescription.isNullOrEmpty() || text.isNotEmpty()
-            if (labelled && r.width() in 1 until bar.width() * 6 / 10 && r.height() > 0) {
-                parts += Rect(r)
-                if (depth <= 6 && id.isNotEmpty()) names.append(id.substringAfterLast('/')).append(' ')
-            }
+            if (BarRules.isSpacer(id)) spacerNode = n
+            nodes += BarNode(id, Rect().also { n.getBoundsInScreen(it) }.box(), depth, n.text?.toString().orEmpty(),
+                described = !n.contentDescription.isNullOrEmpty(), clickable = n.isClickable, children = n.childCount)
             for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.add(it to depth + 1) }
         }
-        val free = spacer?.takeIf { it.width() > 0 } ?: widestGap(bar, parts)
-        return BarSnapshot(w.id, bar, free, clock, names.toString().trim(), spacerNode, spacer)
+        return Scanned(BarRules.parse(w.id, bar, nodes), spacerNode)
     }
 
     /**
@@ -94,10 +75,15 @@ object StatusBarScan {
      * BentoBar's strip ends right before them. Without the system icons, the widest gap. The apps' row
      * ([APPS]) is the node a light check refreshes: it grows as apps open.
      */
-    fun scanTaskbar(w: AccessibilityWindowInfo): BarSnapshot {
+    // One round trip: prefetch the (small, ~35 node) tree instead of an IPC per getChild().
+    private fun root(w: AccessibilityWindowInfo): AccessibilityNodeInfo? = w.getRoot(
+        AccessibilityNodeInfo.FLAG_PREFETCH_DESCENDANTS_DEPTH_FIRST or
+            AccessibilityNodeInfo.FLAG_PREFETCH_UNINTERRUPTIBLE,
+    )
+
+    fun scanTaskbar(w: AccessibilityWindowInfo): Scanned {
         val bar = Rect().also { w.getBoundsInScreen(it) }
-        val root = w.getRoot(AccessibilityNodeInfo.FLAG_PREFETCH_DESCENDANTS_DEPTH_FIRST or
-            AccessibilityNodeInfo.FLAG_PREFETCH_UNINTERRUPTIBLE) ?: return BarSnapshot(w.id, bar, Rect(bar), null, NO_TREE)
+        val root = root(w) ?: return Scanned(BarSnapshot(w.id, bar.box(), bar.box(), null, BarRules.NO_TREE), null)
         var tray: Rect? = null
         var clock: Rect? = null
         var apps: AccessibilityNodeInfo? = null
@@ -121,7 +107,7 @@ object StatusBarScan {
         }
         val free = tray?.let { t -> freeBefore(bar.left, t.left, parts.map { it.left to it.right }).let { (l, r) -> Rect(l, bar.top, r, bar.bottom) } }
             ?: widestGap(bar, parts)
-        return BarSnapshot(w.id, bar, free, clock, names.toString().trim(), apps, appsAt)
+        return Scanned(BarSnapshot(w.id, bar.box(), free.box(), clock?.box(), names.toString().trim(), spacer = appsAt?.box()), apps)
     }
 
     /** From the right end of the last span that ends before [end] (or from [start]) up to [end]; pure, unit-tested. */
@@ -143,5 +129,40 @@ object StatusBarScan {
         }
         if (bar.right - cursor > best.width()) best = Rect(cursor, bar.top, bar.right, bar.bottom)
         return best
+    }
+
+    /**
+     * The screenshots' answers, on one thread for the whole process, never shut down: a controller that stops must not
+     * leave an answer with nowhere to run, because running it is what closes the screenshot's buffer ([barColors]). A
+     * result that arrives after stop() is then dropped on the main thread by [ColorReader]'s started check.
+     */
+    private val answers = Executors.newSingleThreadExecutor()
+
+    /**
+     * A reading: a screenshot of the status bar window only, its pixels read for [ColorReader]. [done] gets the colours
+     * (null: the picture gave none), or the code of Android's refusal as its second argument.
+     */
+    fun shoot(service: AccessibilityService, s: BarSnapshot, done: (BarColors?, Int?) -> Unit) {
+        service.takeScreenshotOfWindow(s.windowId, answers, object : AccessibilityService.TakeScreenshotCallback {
+            override fun onSuccess(r: AccessibilityService.ScreenshotResult) { done(runCatching { barColors(r, s) }.getOrNull(), null) }
+            override fun onFailure(code: Int) { done(null, code) }
+        })
+    }
+
+    /** The pixels around the clock (the whole bar when no clock was found), as [BarPixels] reads them. */
+    private fun barColors(r: AccessibilityService.ScreenshotResult, s: BarSnapshot): BarColors? {
+        val hb = r.hardwareBuffer
+        val bmp = try {
+            Bitmap.wrapHardwareBuffer(hb, r.colorSpace)?.let { wrapped -> wrapped.copy(Bitmap.Config.ARGB_8888, false).also { wrapped.recycle() } }
+        } finally { hb.close() }
+        bmp ?: return null
+        try {
+            val area = (s.clock ?: s.bar).rect().apply { offset(-s.bar.left, -s.bar.top) }
+            // A clock box outside the picture (the bar changed size since the scan): read all of it.
+            if (!area.intersect(0, 0, bmp.width, bmp.height)) area.set(0, 0, bmp.width, bmp.height)
+            val px = IntArray(area.width() * area.height())
+            bmp.getPixels(px, 0, area.width(), area.left, area.top, area.width(), area.height())
+            return BarPixels.colors(px, area.width())
+        } finally { bmp.recycle() }
     }
 }

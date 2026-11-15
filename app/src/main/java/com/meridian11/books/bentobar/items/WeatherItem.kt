@@ -5,7 +5,6 @@ import androidx.compose.runtime.Composable
 import com.meridian11.books.bentobar.R
 import com.meridian11.books.bentobar.data.ItemConfig
 import com.meridian11.books.bentobar.data.Online
-import com.meridian11.books.bentobar.data.Section
 import com.meridian11.books.bentobar.data.Store
 import com.meridian11.books.bentobar.util.Dates
 import com.meridian11.books.bentobar.util.Now
@@ -26,6 +25,9 @@ import java.util.concurrent.atomic.AtomicReference
  * ([WeatherSource], tested against a fake network); the menu and the settings are in `WeatherMenu.kt`.
  */
 object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY_CLOUDY_DAY, R.string.item_weather_desc) {
+    override val group = ItemGroup.ONLINE
+    override val onlineNote = R.string.about_privacy_weather
+    override val usesMyLocation = true
     override val refreshMs = 10_000L
     override val menuWidthDp = 340
     override val online = Online.Service.OPEN_METEO
@@ -47,7 +49,7 @@ object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY
         up = Now::elapsed,
         layout = { Store.config.value.items },
         staged = { stagedFailure.getAndSet(null) },
-        here = { WeatherHere.fix },
+        here = { WeatherHere.place },
         locating = { WeatherHere.why },
     )
 
@@ -79,7 +81,7 @@ object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY
     }
 
     /** The state [item] is in at [now]: the staged one in a test, else the real one. It asks nothing. */
-    internal fun status(item: ItemConfig, now: Long): Status =
+    internal fun status(item: ItemConfig, now: Long): Status<Reading> =
         staged(item)?.let { WeatherRules.status(hasPlace = true, on = true, setUp = true, reading = it.reading, now = now) } ?: source.status(item, now)
 
     /**
@@ -94,9 +96,15 @@ object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY
         if (staged(item) != null) stagedSince = Now.elapsed() else source.again(item)
     }
 
+    override fun trouble(item: ItemConfig, now: Long): Trouble? = WeatherRules.silence(status(item, now))?.let { (failure, lastAt) ->
+        Trouble(if (failure == Failure.SLOW_DOWN) R.string.weather_no_answer_hour else R.string.weather_no_answer_15, lastAt, againEntry(item) == Again.READY)
+    }
+
+    override fun tryAgain(item: ItemConfig) = again(item)
+
     override fun state(item: ItemConfig): ItemState {
         val now = Now.wall()
-        // Loads the place's reading if it is due: only for an item with a city, outside Off, while the switch is on.
+        // Loads the place's reading if it is due: only for an item with a city, while the switch is on.
         if (staged(item) == null) source.reading(item)
         val bar = WeatherRules.bar(status(item, now), look(item), now, Words, times())
         return ItemState(icon = bar.icon, filled = bar.filled, text = bar.text, desc = bar.desc, active = bar.active, tone = bar.tone,
@@ -110,36 +118,26 @@ object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY
     private var keptFor: Set<Place>? = null
 
     /**
-     * The last reading of a place is deleted with the last item that shows it, when that item gets
-     * another city, and when it is turned off: looked at whenever the layout's items changed, from
-     * [sample] and from [onIdle]. That an item in Off keeps no reading is what makes this sure: the
-     * tick that turns the last item off still runs [onIdle] for the type, while a later delete of an
-     * item that is off runs nothing at all ([WeatherLoad.places]). Main thread.
+     * The last reading of a place is deleted with the last item that shows it, and when that item gets
+     * another city: looked at whenever the layout's items changed, from [sample] and from [onIdle]
+     * ([WeatherLoad.places]). Main thread.
      */
     private fun tidy() {
         val items = Store.config.value.items
-        val here = WeatherHere.fix
-        val near = here?.let { WeatherRules.nearby(it.lat, it.lon) }
+        val near = WeatherHere.place
         if (items === seenItems && near == seenNear) return
         seenItems = items
         seenNear = near
-        val places = WeatherLoad.places(items, here)
+        val places = WeatherLoad.places(items, near)
         if (places == keptFor) return
         keptFor = places
         source.keepOnly(places, cities = WeatherLoad.places(items))
     }
 
-    override fun sample(now: Long) {
-        // Kept for an item of My location outside Off, while the switch is on; asked for only while such an item is sampled (on screen, or waiting in Hidden for its Show when rule).
-        WeatherHere.follow(Store.config.value.items, Ticker.sampled, Online.on(online))
-        tidy()
-    }
+    override fun sample(now: Long) = tidy()
 
-    // Also when the last Weather item went, or the last of My location went to Off: nothing samples this type any more, so this is the moment that is left.
-    override fun onIdle() {
-        WeatherHere.follow(Store.config.value.items, sampled = emptyList(), on = Online.on(online))
-        tidy()
-    }
+    // Also when the last Weather item went, or the last of My location: nothing samples this type any more, so this is the moment that is left.
+    override fun onIdle() = tidy()
 
     override val menu: @Composable (ItemConfig, MenuHost) -> Unit = { item, host -> WeatherMenu(item, host) }
 
@@ -158,9 +156,9 @@ object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY
         private set
 
     /** The first Weather item that could show: the one a staged sample is for. */
-    private fun firstShown(): ItemConfig? = Store.config.value.items.firstOrNull { it.type == type && it.section != Section.OFF }
+    private fun firstShown(): ItemConfig? = Store.config.value.items.firstOrNull { it.type == type }
 
-    /** The sample staged for [item], if it is the first Weather item of the layout that is not turned off. */
+    /** The sample staged for [item], if it is the first Weather item of the layout. */
     internal fun staged(item: ItemConfig): WeatherSamples.Sample? = stagedReading?.takeIf { firstShown()?.id == item.id }
 
     /**
@@ -179,13 +177,16 @@ object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY
      * `weather fail error|slow-down|offline`, `weather off`, and `weather` alone for where things
      * stand. What it answers is logged, so it names no city and no coordinates.
      */
+    // The searches first: the field they answer in is drawn while nothing is set up, which a staged sample ends.
+    override val stages = listOf("places", "none", "offline", "error", "busy").map { "search $it" } + WeatherSamples.names.map { "stage $it" }
+
     override fun debug(args: List<String>): String? = when (args.firstOrNull()) {
         null -> {
             val items = Store.config.value.items.filter { it.type == type }
             val first = firstShown()
             val reading = first?.let { source.peek(it) }
-            "staged=${stagedReading?.name ?: "none"} here=${if (WeatherHere.fix != null) "known" else WeatherHere.why} search=${if (stagedSearch == null) "real" else "staged"} fail=${stagedFailure.get() ?: "none"}" +
-                " items=${items.size} places=${WeatherLoad.places(items, WeatherHere.fix).size}" +
+            "staged=${stagedReading?.name ?: "none"} here=${if (WeatherHere.place != null) "known" else WeatherHere.why} search=${if (stagedSearch == null) "real" else "staged"} fail=${stagedFailure.get() ?: "none"}" +
+                " items=${items.size} places=${WeatherLoad.places(items, WeatherHere.place).size}" +
                 " on=${Online.on(online)} setUp=${Online.setUp(online)}" + (first?.let {
                     " first=${status(it, Now.wall()).javaClass.simpleName} loading=${source.loading(it)} failure=${reading?.failure ?: "none"}" +
                         " again=${againEntry(it)}" +
@@ -194,7 +195,7 @@ object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY
         }
         "stage" -> {
             val sample = WeatherSamples.of(args.getOrNull(1).orEmpty(), Now.wall(), ZoneId.systemDefault())
-            if (sample == null) "no such sample; there are: ${WeatherSamples.names.joinToString(" ")}" else {
+            if (sample == null) null else {
                 stagedReading = sample
                 stagedSince = Now.elapsed()
                 Ticker.refresh()
@@ -213,14 +214,15 @@ object WeatherItem : ItemType("weather", R.string.item_weather_title, Sym.PARTLY
                 "offline" -> Ask.State.Done(asked, Found.Offline)
                 "error" -> Ask.State.Done(asked, Found.NoAnswer)
                 "busy" -> Ask.State.Busy(asked)
-                else -> null
+                "off", null -> null
+                else -> return null
             }
             stagedSearch = state
             Ticker.refresh()
             if (state == null) "search staging off (places, none, offline, error or busy stage an answer)" else "staged a search answer: ${args[1]}"
         }
         "fail" -> {
-            val failure = when (args.getOrNull(1)) { "error" -> Failure.NO_ANSWER; "slow-down" -> Failure.SLOW_DOWN; "offline" -> Failure.OFFLINE; else -> null }
+            val failure = when (args.getOrNull(1)) { "error" -> Failure.NO_ANSWER; "slow-down" -> Failure.SLOW_DOWN; "offline" -> Failure.OFFLINE; "off", null -> null; else -> return null }
             stagedFailure.set(failure)
             if (failure == null) "no failure staged (error, slow-down or offline stage one)"
             else "the next forecast request is not sent and counts as ${args[1]}"

@@ -63,9 +63,15 @@ ICONS += """
 show_chart trending_down trending_up
 """.split()
 
-# Added for Device batteries' link: the phone or tablet whose batteries are shown here.
+# Added for the items after 1.8 and Device batteries' link (smartphone, tablet_android).
 ICONS += """
 smartphone tablet_android
+mic mic_off videocam_off photo_camera_front flip subtitles text_increase text_decrease inbox attach_file image
+description radio_button_checked self_improvement center_focus_strong routine brightness_low brightness_medium
+brightness_high brightness_auto backlight_low backlight_high lan vpn_lock captive_portal signal_wifi_bad
+settings_ethernet signal_cellular_alt usb tv timelapse clock_loader_10 clock_loader_20 clock_loader_40
+clock_loader_60 clock_loader_80 clock_loader_90 relax currency_bitcoin data_object auto_awesome translate summarize
+spellcheck short_text clear_all downloading call hourglass_bottom
 """.split()
 
 # Symbols also exported as vector drawables (tiles, notifications, launcher icon), from the filled font.
@@ -73,7 +79,8 @@ DRAWABLES = ["coffee", "timer", "avg_pace", "event", "pause", "play_arrow", "add
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = pathlib.Path(os.environ.get("BENTOBAR_CACHE", pathlib.Path.home() / ".cache/bentobar"))
-BASE = "https://raw.githubusercontent.com/google/material-design-icons/master/variablefont/"
+# Pinned to a commit, not master: with no cached font an icon added later must not change every glyph. Move it on purpose.
+BASE = "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/variablefont/"
 VF = "MaterialSymbolsRounded[FILL,GRAD,opsz,wght]"
 
 

@@ -50,7 +50,7 @@ class StocksLoadTest {
         val r = net.asked.single()
         assertEquals(Host.FINNHUB, r.host)
         assertEquals("/api/v1/quote", r.path)
-        assertEquals(listOf("symbol" to "AAPL", "token" to key), r.query)
+        assertEquals(listOf("symbol" to "AAPL"), r.query)
         // Printed, a request says its host and path only: never the key, never the stock.
         assertEquals("api.finnhub.io/api/v1/quote", r.toString())
     }
@@ -58,7 +58,7 @@ class StocksLoadTest {
     @Test fun aSearchIsTheTextLimitedToTheUsAndTheKey() = FakeHttp.use { net ->
         net.reply(Host.FINNHUB, Finnhub.SEARCH, found)
         StocksLoad.search("apple")
-        assertEquals(listOf("q" to "apple", "exchange" to "US", "token" to key), net.asked.single().query)
+        assertEquals(listOf("q" to "apple", "exchange" to "US"), net.asked.single().query)
         assertEquals("apple", StocksLoad.query("  apple\n"))
         assertNull(StocksLoad.query("  "))
         assertEquals(Finnhub.QUERY_CHARS, StocksLoad.query("x".repeat(500))!!.length)
@@ -187,12 +187,11 @@ class StocksLoadTest {
         assertEquals(Finnhub.Failure.NO_ANSWER, searched { it.reply(Host.FINNHUB, Finnhub.SEARCH, """{"error":"Invalid API key."}""") })
     }
 
-    @Test fun theSymbolsOfALayoutAreItsStocksItemsThatAreNotOff() {
+    @Test fun theSymbolsOfALayoutAreItsStocksItemsShownOrHidden() {
         fun stocks(id: String, json: String, section: Section = Section.SHOWN) = ItemConfig(id, "stocks", section, options = mapOf("stocks" to json))
         val items = listOf(
             stocks("a", """[{"s":"AAPL","n":"APPLE INC"},{"s":"MSFT","n":"MICROSOFT"}]"""),
             stocks("b", """[{"s":"MSFT","n":"MICROSOFT"}]""", Section.HIDDEN),
-            stocks("c", """[{"s":"NVDA","n":"NVIDIA"}]""", Section.OFF),
             ItemConfig("d", "weather", options = mapOf("stocks" to """[{"s":"TSLA"}]""")),
         )
         assertEquals(setOf("AAPL", "MSFT"), StocksLoad.symbols(items))

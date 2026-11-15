@@ -465,13 +465,13 @@ class DevicesRulesTest {
         }
     }
 
-    // ---- the words, as the copy deck has them
+    // ---- the words
 
     @Test fun theTextIsTheCopyDecksToTheCharacter() {
         val deck = mapOf(
             "item_devices_title" to "Device batteries",
             "item_devices_desc" to "The battery of your mouse, keyboard, stylus or headphones; shows when one is low",
-            "trigger_devices" to "Show when a device's battery is below %1\$s",
+            "trigger_devices" to "while a device's battery is below %1\$s",
             "trigger_devices_short" to "shows below %1\$s",
             "devices_none" to "No device reports a battery",
             "devices_level_charging" to "%1\$s · Charging",
@@ -498,17 +498,17 @@ class DevicesRulesTest {
             "devices_share_permission_desc" to "Read the battery levels and names of the mice, keyboards, earbuds and other devices " +
                 "BentoBar sees, while BentoBar's sharing is on.",
         )
+        assertEquals(deck, StringFiles.file("src/main/res/values/strings_devices.xml").filterKeys { it in deck })
+    }
+
+    @Test fun theStringsFileHoldsNothingNobodyAsksFor() {
+        assertEquals("a string in strings_devices.xml that no code shows", emptyList<String>(), StringFiles.unused("src/main/res/values/strings_devices.xml"))
+    }
+
+    @Test fun theCountedSentencesReadAlikeInEnglishInBothForms() {
         // Sentences with a number in them are plurals, as everywhere in the app; in English both forms read alike.
-        val counted = mapOf(
-            "devices_desc" to "%1\$s battery %2\$d percent",
-            "devices_desc_low" to "%1\$s battery %2\$d percent, low",
-            "devices_desc_charging" to "%1\$s battery %2\$d percent, charging",
-        )
         val own = HeatDevicesStrings("strings_devices.xml")
-        for ((name, words) in deck) assertEquals(name, words, own[name])
-        for ((name, words) in counted) assertEquals(name, words to words, own.forms(name))
-        assertEquals("%1\$d device" to "%1\$d devices", own.forms("devices_count"))
-        assertEquals("the file holds the copy deck's strings and no other", deck.keys + counted.keys + "devices_count", own.names)
+        for (name in listOf("devices_desc", "devices_desc_low", "devices_desc_charging")) assertEquals(name, own.forms(name).first, own.forms(name).second)
     }
 
     @Test fun aLevelOfOnePercentReadsAsTheOthersDo() {
@@ -522,7 +522,7 @@ class DevicesRulesTest {
         assertEquals("1 device", text.plural("devices_count", 1))
         assertEquals("2 devices", text.plural("devices_count", 2))
         assertEquals("85% · Charging", text.format("devices_level_charging", "85%"))
-        assertEquals("Show when a device's battery is below 20%", text.format("trigger_devices", "20%"))
+        assertEquals("while a device's battery is below 20%", text.format("trigger_devices", "20%"))
         assertEquals("shows below 20%", text.format("trigger_devices_short", "20%"))
     }
 

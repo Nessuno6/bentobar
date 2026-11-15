@@ -1,6 +1,7 @@
 package com.meridian11.books.bentobar.items
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
@@ -67,12 +68,13 @@ import com.meridian11.books.bentobar.util.SymIcon
  * Which devices are listed and what the bar makes of them is in [DevicesRules].
  */
 object DevicesItem : ItemType("devices", R.string.item_devices_title, Sym.MOUSE, R.string.item_devices_desc) {
+    override val group = ItemGroup.SYSTEM
     override val refreshMs = 5_000L
     override val canBeActive = true
     override val addsWhenActive = true
 
-    /** The Battery item's rule, but up to 100%: earbuds drain fast, and some want them in the bar well before they are low. */
-    private val below = Threshold("lowPct", 20, 5..100, step = 5) { "$it%" }
+    /** The Battery item's rule, up to 100%: earbuds drain fast, and some want them in the bar well before they are low. */
+    private val below = Threshold("lowPct", 20, 5..100, step = 5) { com.meridian11.books.bentobar.util.Fmt.percent(it) }
     override val trigger = Trigger(R.string.trigger_devices, R.string.trigger_devices_short, below)
 
     private val words = DevicesRules.Words(
@@ -94,7 +96,7 @@ object DevicesItem : ItemType("devices", R.string.item_devices_title, Sym.MOUSE,
     // At most one reading a second, however often Android reports: one that can't be taken now (another is under
     // way, or the last is under a second old) is asked for again on the next tick, never queued behind the other.
     private val watch = DevicesWatch { !readings.loading(Unit) && readings.refresh(Unit, floorMs = DevicesRules.FLOOR_MS) }
-    private val main = Handler(Looper.getMainLooper())
+    private val main by lazy { Handler(Looper.getMainLooper()) }
     private val listener = object : InputManager.InputDeviceListener {
         override fun onInputDeviceAdded(deviceId: Int) = changed()
         override fun onInputDeviceRemoved(deviceId: Int) = changed()
@@ -180,6 +182,7 @@ object DevicesItem : ItemType("devices", R.string.item_devices_title, Sym.MOUSE,
      * thread. Whether one is connected and its level are not in the SDK's API: they are asked for by name, and a
      * device that can't say is left out. No name or address is logged.
      */
+    @SuppressLint("MissingPermission")
     private fun audio(): List<DevicesRules.Audio> {
         if (!headphonesAllowed()) return emptyList()
         val adapter = Env.app.getSystemService(BluetoothManager::class.java)?.adapter ?: return emptyList()
@@ -342,11 +345,12 @@ object DevicesItem : ItemType("devices", R.string.item_devices_title, Sym.MOUSE,
      * to name one), `stage none` no device at all, `off` the real ones again. Without a word: what is
      * shown now.
      */
+    override val stages = listOf("stage mouse=15 keyboard=40c stylus=unknown", "stage keyboard:Keychron_K3=85c", "stage mouse=5", "stage none")
+
     override fun debug(args: List<String>): String? {
         when (args.firstOrNull()) {
             null -> return line()
-            "stage" -> staged = DevicesRules.staged(args.drop(1))
-                ?: return "devices stage none | KIND[:NAME]=LEVEL[c] …, for example mouse=15 keyboard:Keychron_K3=85c stylus=unknown"
+            "stage" -> staged = DevicesRules.staged(args.drop(1)) ?: return null
             "off" -> { staged = null; changed() }
             // What root knows of the ears and the watches: to the log, without addresses.
             "root" -> return "sides=${RootBt.debugSides()} watches=${RootBt.debugWatches()}"

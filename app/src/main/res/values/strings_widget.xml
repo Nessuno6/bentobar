@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The home screen widget (widget/): Device batteries as arcs, in four sizes and a custom grid. -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="widget_main_name">Device batteries</string>
     <string name="widget_main_desc">This device and your others, as arcs: two rows of four</string>
     <string name="widget_1_name">Device batteries · 1 device</string>

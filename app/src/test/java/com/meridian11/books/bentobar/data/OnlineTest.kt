@@ -129,6 +129,34 @@ class OnlineTest {
         assertFalse(Online.on(AIRLABS))
     }
 
+    @Test fun aFailedSaveAfterTurningOnKeepsEverySwitchAndKeyThatWereThere() {
+        Online.saveKey(AIRLABS, key)
+        File(dir, "online.json.part").mkdirs()
+        // The disk refuses the write of turning Weather on: the file as it was stays, and nothing else is lost.
+        assertTrue(Online.turnOn(OPEN_METEO))
+        assertTrue(Online.on(OPEN_METEO))
+        assertTrue(File(dir, "online.json").readText().contains(key))
+        assertFalse(File(dir, "online.json.part").exists())
+        restart()
+        assertEquals(key, Online.key(AIRLABS))
+        assertTrue(Online.hasKey(AIRLABS))
+    }
+
+    @Test fun aFailedSaveAfterSavingAKeyKeepsTheOtherKeys() {
+        Online.saveKey(AIRLABS, key)
+        File(dir, "online.json.part").mkdirs()
+        Online.saveKey(com.meridian11.books.bentobar.data.Online.Service.FINNHUB, "another-key-98765")
+        assertTrue(File(dir, "online.json").readText().contains(key))
+    }
+
+    @Test fun aFailedSaveAfterTurningOffStillForgetsTheFile() {
+        Online.saveKey(AIRLABS, key)
+        Online.turnOn(OPEN_METEO)
+        File(dir, "online.json.part").mkdirs()
+        Online.turnOff(AIRLABS)
+        assertFalse(File(dir, "online.json").exists())
+    }
+
     @Test fun aFileNobodyCanReadCountsAsNothingSetUp() {
         File(dir, "online.json").writeText("not json {")
         restart()
@@ -141,6 +169,76 @@ class OnlineTest {
         restart()
         assertFalse(Online.on(AIRLABS)); assertFalse(Online.setUp(AIRLABS))
         assertTrue(Online.on(OPEN_METEO))
+    }
+
+    @Test fun theServicesAreTheseAndNoOthers() {
+        assertEquals(listOf("openMeteo", "airLabs", "finnhub", "frankfurter"), Online.Service.entries.map { it.id })
+        assertEquals(setOf(Online.Service.AIRLABS, Online.Service.FINNHUB), Online.Service.entries.filter { it.needsKey }.toSet())
+        assertEquals(setOf(com.meridian11.books.bentobar.net.Host.FRANKFURTER), Online.Service.FRANKFURTER.hosts)
+        // Every service stands for a host by name: none takes an address.
+        for (service in Online.Service.entries) assertTrue("$service", service.hosts.isNotEmpty())
+    }
+
+    @Test fun aFileWithTheRetiredKrakenSwitchLoadsWithoutItAndIsWrittenAgain() {
+        // What a 2.0 test build with Crypto on wrote: Kraken on and set up, beside a service that stays.
+        File(dir, "online.json").writeText("""{"on":["kraken","frankfurter"],"setUp":["kraken","frankfurter"],"keys":{}}""")
+        File(dir, "fetched/kraken").mkdirs()
+        File(dir, "fetched/kraken/prices.txt").writeText("0\n{}")
+        restart()
+        assertEquals(setOf(Online.Service.FRANKFURTER), Online.state.value.on)
+        assertEquals(setOf(Online.Service.FRANKFURTER), Online.state.value.setUp)
+        val text = File(dir, "online.json").readText()
+        assertFalse(text, "kraken" in text)
+        assertTrue(text, "frankfurter" in text)
+        assertFalse(File(dir, "fetched/kraken").exists())
+        restart()
+        assertTrue(Online.on(Online.Service.FRANKFURTER))
+    }
+
+    @Test fun aFileWithTheRetiredOwnAddressesSwitchLoadsWithoutItAndIsWrittenAgain() {
+        // What 2.1 with a Value from a URL item wrote: "Your own addresses" on and set up, beside a service that stays.
+        File(dir, "online.json").writeText("""{"on":["own","openMeteo"],"setUp":["own","openMeteo"],"keys":{}}""")
+        restart()
+        assertEquals(setOf(OPEN_METEO), Online.state.value.on)
+        assertEquals(setOf(OPEN_METEO), Online.state.value.setUp)
+        val text = File(dir, "online.json").readText()
+        assertFalse(text, "own" in text)
+        assertTrue(text, "openMeteo" in text)
+        restart()
+        assertTrue(Online.on(OPEN_METEO))
+    }
+
+    @Test fun whatARetiredTypeKeptOnThisInstallIsDeletedAtTheStart() {
+        // What 2.1 left: a Shelf's texts and the address of a Value from a URL, a file per item, beside a Flight's and a Prompter's.
+        for ((name, text) in listOf("shelf" to "a note dropped on it", "webvalue" to "https://example.com/value", "flight" to "{}", "prompter" to "my notes")) {
+            File(dir, "kept/$name").mkdirs()
+            File(dir, "kept/$name/a1.txt").writeText("0\n$text")
+        }
+        File(dir, "kept/shelf/b2.txt.part").writeText("half written")
+        restart()
+        for (name in Retired.kept) assertFalse(name, File(dir, "kept/$name").exists())
+        assertEquals(setOf("flight", "prompter"), File(dir, "kept").list()?.toSet())
+        assertEquals("my notes", Kept.own("prompter").read("a1")?.text)
+        // And with nothing there to delete, a start is a start.
+        restart()
+        assertEquals(setOf("flight", "prompter"), File(dir, "kept").list()?.toSet())
+    }
+
+    @Test fun aServiceIsAskedOnlyWhileItIsOnSomethingIsOnScreenAndTheLayoutHasItsItem() {
+        val asks: (String) -> Online.Service? = { mapOf("weather" to OPEN_METEO, "fx" to Online.Service.FRANKFURTER)[it] }
+        val both = listOf(ItemConfig("w", "weather"), ItemConfig("x", "fx"))
+        for (s in listOf(OPEN_METEO, Online.Service.FRANKFURTER)) {
+            assertFalse("$s off", Online.mayAsk(s, true, both, asks))
+            Online.turnOn(s)
+            assertTrue("$s on", Online.mayAsk(s, true, both, asks))
+            assertFalse("$s with nothing on screen", Online.mayAsk(s, false, both, asks))
+            assertFalse("$s with its item removed", Online.mayAsk(s, true, both.filterNot { asks(it.type) == s }, asks))
+            // A Hidden item may still have something to say.
+            assertTrue("$s with its item hidden", Online.mayAsk(s, true, both.map { it.copy(section = Section.HIDDEN) }, asks))
+        }
+        // One service's item opens no other: a Weather item is not a reason to ask Frankfurter, nor the other way round.
+        assertFalse(Online.mayAsk(OPEN_METEO, true, listOf(ItemConfig("x", "fx")), asks))
+        assertFalse(Online.mayAsk(Online.Service.FRANKFURTER, true, listOf(ItemConfig("w", "weather")), asks))
     }
 
     @Test fun eachHostBelongsToOneService() {

@@ -2,7 +2,7 @@ package com.meridian11.books.bentobar.widget
 
 import com.meridian11.books.bentobar.items.DevicesRules
 import com.meridian11.books.bentobar.items.DevicesRules.Ears
-import com.meridian11.books.bentobar.items.LinkRules
+import com.meridian11.books.bentobar.items.DeviceLinkRules
 
 /**
  * The home screen widget's rules, pure: which devices it has, in what order, which goes in which cell, how big its
@@ -77,7 +77,7 @@ object WidgetRules {
     /**
      * Every device the widget can show, in its usual order: this device, then the others by kind (a case right after
      * its earbuds), then name. [devices] are Device batteries' own and the linked side's (their descriptors start with
-     * [LinkRules.PREFIX]); [cases] are the cases as last seen, each named as the widget shows it.
+     * [DeviceLinkRules.PREFIX]); [cases] are the cases as last seen, each named as the widget shows it.
      */
     fun cells(self: Cell?, devices: List<DevicesRules.Device>, cases: List<Cell>): List<Cell> {
         val seen = HashSet<String>()
@@ -86,7 +86,7 @@ object WidgetRules {
             val kind = kindOf(d.kind)
             val key = keyOf(kind, d.name)
             if (d.name.isBlank() || !seen.add(key) || key == self?.let { keyOf(it.kind, it.name) }) continue
-            others += Cell(key, d.name, kind, d.percent, d.charging, d.ears, linked = d.descriptor.startsWith(LinkRules.PREFIX),
+            others += Cell(key, d.name, kind, d.percent, d.charging, d.ears, linked = d.descriptor.startsWith(DeviceLinkRules.PREFIX),
                 chargingEars = d.chargingEars)
         }
         others += cases.filter { seen.add(it.key) }

@@ -26,15 +26,16 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 /**
  * A Compose UI in a TYPE_ACCESSIBILITY_OVERLAY window: the only window type an app may put on
  * top of the status bar. It brings its own lifecycle, saved-state and view-model owners because
- * there's no Activity. [onOutside] fires for touches outside the window (menus close on it) and
- * [onKey] gets key events while the window has focus.
+ * there's no Activity. [onOutside] fires for touches outside the window (menus close on it) and is
+ * handed the touch, which says where it was when it fell on another of this app's windows. [onKey]
+ * gets key events while the window has focus.
  */
 class Overlay(
     private val context: Context,
     title: String,
     focusable: Boolean = false,
     touchable: Boolean = true,
-    private val onOutside: (() -> Unit)? = null,
+    private val onOutside: ((MotionEvent) -> Unit)? = null,
     private val onKey: ((KeyEvent) -> Boolean)? = null,
 ) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
@@ -89,6 +90,7 @@ class Overlay(
         }
         compose = cv
         root = frame
+        applied = Placement(params.x, params.y, params.width, params.height, params.gravity, params.flags)
     }
 
     /**
@@ -98,8 +100,16 @@ class Overlay(
      */
     fun setContentVisible(visible: Boolean) { root?.visibility = if (visible) android.view.View.VISIBLE else android.view.View.INVISIBLE }
 
+    /** What the window was last given: a [relayout] that changes nothing is skipped, or every look at the bar costs a layout pass. */
+    private var applied: Placement? = null
+
     /** Applies changed [params] (position, size, flags). */
-    fun relayout() { root?.let { runCatching { wm.updateViewLayout(it, params) } } }
+    fun relayout() {
+        val r = root ?: return
+        val now = Placement(params.x, params.y, params.width, params.height, params.gravity, params.flags)
+        if (now == applied) return
+        runCatching { wm.updateViewLayout(r, params) }.onSuccess { applied = now }
+    }
 
     /** Hear about clicks outside this window ([onOutside]) only while it matters, e.g. while hidden items are out. */
     fun watchOutside(on: Boolean) {
@@ -113,6 +123,7 @@ class Overlay(
         runCatching { wm.removeViewImmediate(r) }
         root = null
         compose = null
+        applied = null
         life.hidden()
     }
 
@@ -126,10 +137,13 @@ class Overlay(
     /** Screen position of the window's top-left corner. */
     fun locationOnScreen(): IntArray = IntArray(2).also { root?.getLocationOnScreen(it) }
 
+    /** Everything of a window that [relayout] can change. */
+    private data class Placement(val x: Int, val y: Int, val width: Int, val height: Int, val gravity: Int, val flags: Int)
+
     @SuppressLint("ViewConstructor")
     private inner class Frame(context: Context) : FrameLayout(context) {
         override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-            if (ev.actionMasked == MotionEvent.ACTION_OUTSIDE) { onOutside?.invoke(); return true }
+            if (ev.actionMasked == MotionEvent.ACTION_OUTSIDE) { onOutside?.invoke(ev); return true }
             return super.dispatchTouchEvent(ev)
         }
 

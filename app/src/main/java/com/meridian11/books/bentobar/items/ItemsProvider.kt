@@ -63,7 +63,7 @@ class ItemsProvider : ContentProvider() {
             val token = Binder.clearCallingIdentity()
             try {
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    (Env.service as? com.meridian11.books.bentobar.bar.BarService)?.controller()?.closeShared()
+                    Env.closeSharedItem()
                 }
                 return Bundle()
             } finally {
@@ -79,9 +79,9 @@ class ItemsProvider : ContentProvider() {
             val on = Sharing.items.value
             // The bar lives on the main thread; the caller need not wait for the popup.
             if (on) android.os.Handler(android.os.Looper.getMainLooper()).post {
-                (Env.service as? com.meridian11.books.bentobar.bar.BarService)?.controller()?.openAt(id, at, hover = extras?.getBoolean(EXTRA_HOVER) == true)
+                Env.openSharedItem(id, at, extras?.getBoolean(EXTRA_HOVER) == true)
             }
-            return Bundle().apply { putBoolean(EXTRA_ENABLED, on); putBoolean(EXTRA_OPENED, on && Env.service != null) }
+            return Bundle().apply { putBoolean(EXTRA_ENABLED, on); putBoolean(EXTRA_OPENED, on && Env.running) }
         } finally {
             Binder.restoreCallingIdentity(token)
         }

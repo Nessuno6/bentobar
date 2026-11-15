@@ -1,12 +1,11 @@
 package com.meridian11.books.bentobar.data
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.serialization.json.Json
+import java.io.File
 import java.util.UUID
 
 /**
@@ -17,12 +16,9 @@ import java.util.UUID
 object Store {
     private const val TAG = "BentoBar"
     private const val KEY = "bar"
-    // A value this version doesn't know (a later version's enum constant) falls back to the field's default
-    // instead of making the whole layout unreadable.
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; coerceInputValues = true }
-    /** A stored layout that could not be read is kept here as it was, not overwritten by the next edit. */
+    /** A stored layout that could not be read is kept here as it was, not overwritten by the next edit, until Backup's offer of it is answered. */
     private const val KEY_UNREADABLE = "bar_unreadable"
-    private lateinit var prefs: SharedPreferences
+    private lateinit var prefs: Prefs
     private val state = MutableStateFlow(BarConfig())
     val config: StateFlow<BarConfig> get() = state.asStateFlow()
 
@@ -30,70 +26,119 @@ object Store {
      * The user's answer to the accessibility disclosure. Google Play's User Data policy wants an app
      * that isn't an accessibility tool to say what it uses the AccessibilityService API for and get
      * consent, with a way to decline, before it sends anyone to turn its service on. Kept beside the
-     * layout, not in it: Copy settings must not carry consent to another install.
+     * layout, not in it, and in Android's no-backup directory like the online switches (data/Online.kt):
+     * Copy settings, a backup and a device transfer must not carry consent to another install.
      */
     enum class Consent { NOT_ASKED, DECLINED, AGREED }
 
-    private const val KEY_CONSENT = "accessibility_consent"
+    private const val KEY_CONSENT = "accessibility_consent" // where 1.7 kept it, in the backed-up prefs
+    private const val CONSENT_FILE = "consent"
+    private var consentFile: File? = null
     private val consentState = MutableStateFlow(Consent.NOT_ASKED)
     val consent: StateFlow<Consent> get() = consentState.asStateFlow()
 
     fun setConsent(answer: Consent) {
         consentState.value = answer
-        prefs.edit().putString(KEY_CONSENT, answer.name).apply()
+        consentFile?.let { runCatching { it.writeText(answer.name, Charsets.UTF_8) } }
+    }
+
+    /**
+     * The saved answer in [noBackupDir]. With none there, the answer an earlier version kept in the prefs ([legacy]) is
+     * moved over once, and [legacyMoved] is called when the file holds it, so the caller may drop the old key; a restored backup that still holds one counts as that install's own answer.
+     */
+    internal fun loadConsent(noBackupDir: File, legacy: String?, legacyMoved: () -> Unit = {}): Consent {
+        val file = File(noBackupDir, CONSENT_FILE).also { consentFile = it }
+        fun parse(name: String?) = name?.trim()?.let { runCatching { Consent.valueOf(it) }.getOrNull() }
+        parse(runCatching { file.takeIf { it.isFile }?.readText(Charsets.UTF_8) }.getOrNull())?.let { legacyMoved(); return it }
+        val moved = parse(legacy) ?: return Consent.NOT_ASKED
+        // Only a file that now holds the answer lets the legacy key go: a failed write must lose nothing.
+        if (runCatching { file.writeText(moved.name, Charsets.UTF_8) }.isSuccess) legacyMoved()
+        return moved
     }
 
     @Synchronized
     fun init(context: Context) {
         if (::prefs.isInitialized) return
-        prefs = context.applicationContext.getSharedPreferences("bentobar", Context.MODE_PRIVATE)
-        consentState.value = prefs.getString(KEY_CONSENT, null)?.let { runCatching { Consent.valueOf(it) }.getOrNull() } ?: Consent.NOT_ASKED
-        val raw = prefs.getString(KEY, null)
-        val read = raw?.let(::decode)
-        if (raw != null && read == null) {
-            // Not logged as it is: it can hold a city or a note. Kept, so that starting fresh loses nothing for good.
-            Log.w(TAG, "settings unreadable, starting fresh; kept as they were")
-            prefs.edit().putString(KEY_UNREADABLE, raw).apply()
+        val app = context.applicationContext
+        val file = SharedPrefs(app.getSharedPreferences("bentobar", Context.MODE_PRIVATE))
+        consentState.value = loadConsent(app.noBackupFilesDir, file.string(KEY_CONSENT)) {
+            file.edit { remove(KEY_CONSENT) } // now in the no-backup file
         }
-        state.value = read ?: Defaults.config()
-        // v1 → v2: timed hiding of revealed items became opt-in; 8 s was only the old default.
-        if (state.value.version < 2) {
-            val c = state.value
-            state.value = c.copy(version = 2, autoCollapseSec = if (c.autoCollapseSec == 8) 0 else c.autoCollapseSec)
-            save(state.value)
-        }
-        if (state.value.version < 3) { state.value = state.value.migrateToV3(); save(state.value) }
-        if (raw == null) save(state.value)
+        open(file)
     }
 
-    fun update(change: (BarConfig) -> BarConfig) {
-        val next = synchronized(this) {
-            val n = change(state.value)
-            if (n == state.value) return
-            state.value = n
-            n
+    /**
+     * Reads the layout kept in [file]: [init]'s work, and with a map instead of Android's preferences, a test's. What can't
+     * be read is not lost: it is set aside ([KEY_UNREADABLE]) and Backup offers it ([setAside]). The stored layout itself
+     * is left as it is until the next edit, so an update that can read it brings it back by itself.
+     */
+    @Synchronized
+    internal fun open(file: Prefs, log: (String) -> Unit = { Log.w(TAG, it) }) {
+        prefs = file
+        val raw = file.string(KEY)
+        val read = raw?.let(::readLayout)
+        state.value = (read as? LayoutRead.Ok)?.config ?: Defaults.config()
+        when {
+            raw == null -> save(state.value)
+            read is LayoutRead.Ok -> {
+                if (read.changed) save(state.value)
+                // It reads again, so a copy of this very layout has nothing left to offer.
+                if (file.string(KEY_UNREADABLE) == raw) file.edit { remove(KEY_UNREADABLE) }
+            }
+            else -> {
+                // Not logged as it is: it can hold a city or a note. Kept, so that starting fresh loses nothing for good.
+                log(if (read is LayoutRead.Newer) "settings from a newer version (${read.version}), starting fresh; kept as they were"
+                    else "settings unreadable, starting fresh; kept as they were")
+                file.edit { put(KEY_UNREADABLE, raw) }
+            }
         }
-        save(next)
+        setAsideState.value = file.string(KEY_UNREADABLE)?.let(::whyKept)
+    }
+
+    /**
+     * Every change goes through here. What it leaves has no Off item ([withoutOff]): a layout is read without them, and
+     * no change can make one, so nothing else in the app asks whether an item is Off.
+     */
+    fun update(change: (BarConfig) -> BarConfig) {
+        synchronized(this) {
+            val was = state.value
+            val n = change(was).withoutOff()
+            if (n == was) return
+            state.value = n
+            // Inside the lock, so a later change can never be saved before this one.
+            save(n)
+        }
     }
 
     fun updateItem(id: String, change: (ItemConfig) -> ItemConfig) =
         update { c -> c.copy(items = c.items.map { if (it.id == id) change(it) else it }) }
 
     /**
-     * A new item goes at the left of the bar, where a new item is easy to spot, but after the Next
-     * meeting item, which stays at the far left: its width changes most, and at the bar's outer
-     * edge that moves nothing else. Hidden and Off items go at the end of their section. [whenActive]:
-     * with its "Show when" rule on (for the types that are added to When active).
+     * A new item goes into [area], or with none named into the layout's [home area][homeArea], at the place [added] says.
+     * [whenActive]: with its "Show when" rule on (for the types that are added to When active).
      */
-    fun add(type: String, section: Section = Section.SHOWN, options: Map<String, String> = emptyMap(), whenActive: Boolean = false): String {
+    fun add(type: String, section: Section = Section.SHOWN, options: Map<String, String> = emptyMap(), whenActive: Boolean = false, area: Position? = null): String {
         val id = newId()
-        update { c ->
-            val item = ItemConfig(id, type, section, whenActive = whenActive, options = options)
-            val at = if (section != Section.SHOWN) -1
-                else c.items.indexOfFirst { it.section == Section.SHOWN && it.type != PINNED_LEFT }
-            c.copy(items = if (at < 0) c.items + item else c.items.toMutableList().apply { add(at, item) })
-        }
+        update { c -> c.copy(items = c.items.added(ItemConfig(id, type, section, whenActive = whenActive, options = options, area = area ?: c.homeArea()))) }
         return id
+    }
+
+    /** What the library's + adds: a [fresh] item of [type], in [area] or with none named in the layout's [home area][homeArea]. */
+    fun addFresh(type: com.meridian11.books.bentobar.items.ItemType, area: Position? = null): String {
+        val id = newId()
+        update { c -> c.copy(items = c.items.added(type.fresh(id, area ?: c.homeArea()))) }
+        return id
+    }
+
+    /**
+     * The list with [new] in it. A Shown item goes at the left of its area, where a new item is easy to spot, but after
+     * the Next meeting item, which stays at the far left: its width changes most, and at the area's outer edge that moves
+     * nothing else. With no Shown item of its area to go before, and for a Hidden item, at the end.
+     */
+    internal fun List<ItemConfig>.added(new: ItemConfig): List<ItemConfig> {
+        val at = if (new.section != Section.SHOWN) -1
+            else indexOfFirst { it.section == Section.SHOWN && it.area == new.area && it.type != PINNED_LEFT }
+        return if (at < 0) this + new else toMutableList().apply { add(at, new) }
     }
 
     /** A copy of [item] with all its settings, right after it; its new id. Duplicate in the item's settings. */
@@ -109,47 +154,71 @@ object Store {
         return if (at < 0) items else items.toMutableList().apply { add(at + 1, items[at].copy(id = id)) }
     }
 
-    /** The item type kept at the bar's far left (see [add]). */
+    /** The item type kept at the far left of its area (see [added]). */
     const val PINNED_LEFT = "event"
 
-    fun remove(id: String) = update { c -> c.copy(items = c.items.filterNot { it.id == id }) }
+    fun remove(id: String) = update { it.without(id) }
 
     /** Moves [id] into [section] at [index] within that section (end if out of range). */
     fun move(id: String, section: Section, index: Int) = update { c -> c.copy(items = c.items.moved(id, section, index)) }
 
     fun newId(): String = UUID.randomUUID().toString().substring(0, 8)
 
-    /** A stored layout as this version reads it: a value it doesn't know is that field's default; null if it isn't a layout at all. */
-    internal fun decode(raw: String): BarConfig? = runCatching { json.decodeFromString(BarConfig.serializer(), raw) }.getOrNull()
-
-    fun export(): String = json.encodeToString(BarConfig.serializer(), state.value)
+    /** The layout and look for Copy settings: what is local to this install stays out (see [LOCAL_SETTINGS]). */
+    fun export(): String = layoutJson.encodeToString(BarConfig.serializer(), state.value.withoutLocal())
 
     /**
-     * Replaces the layout and the look with a pasted one. What belongs to this install stays as it
-     * is here: the permissions switched off in Setup (a pasted layout must not switch calendar reading
-     * back on), whether the bar is shown, presenting, and the first-run state.
+     * Replaces the layout and the look with a pasted one, unless [readLayout] refuses it. What belongs to this install
+     * stays as it is here: the permissions switched off in Setup (a pasted layout must not switch calendar reading back on),
+     * whether the bar is shown, presenting, and the first-run state.
      */
-    fun import(text: String): Boolean {
-        val c = parseLayout(text) ?: return false
-        update { c.keepingLocal(it) }
+    fun import(text: String): LayoutRead {
+        val read = readLayout(text)
+        if (read is LayoutRead.Ok) update { read.config.keepingLocal(it) }
+        return read
+    }
+
+    /** A layout from Copy settings, or null if [readLayout] doesn't take [text]. */
+    fun parseLayout(text: String): BarConfig? = (readLayout(text) as? LayoutRead.Ok)?.config
+
+    /** A layout set aside because it couldn't be read: what Backup offers, until it is put back or discarded. */
+    enum class SetAside { READABLE_NOW, FROM_NEWER_VERSION, UNREADABLE }
+
+    private val setAsideState = MutableStateFlow<SetAside?>(null)
+    val setAside: StateFlow<SetAside?> get() = setAsideState.asStateFlow()
+
+    private fun whyKept(raw: String) = when (readLayout(raw)) {
+        is LayoutRead.Ok -> SetAside.READABLE_NOW
+        is LayoutRead.Newer -> SetAside.FROM_NEWER_VERSION
+        LayoutRead.NotALayout -> SetAside.UNREADABLE
+    }
+
+    /** The layout that was set aside, as it was, for Backup's Copy. */
+    fun setAsideText(): String? = prefs.string(KEY_UNREADABLE)
+
+    /** Puts the layout that was set aside back, when this version can read it: only ever by the user's own press, never over their edits by itself. */
+    fun restoreSetAside(): Boolean {
+        val raw = prefs.string(KEY_UNREADABLE) ?: return false
+        val read = readLayout(raw) as? LayoutRead.Ok ?: return false
+        update { read.config.keepingLocal(it) }
+        prefs.edit { remove(KEY_UNREADABLE) }
+        setAsideState.value = null
         return true
     }
 
-    /**
-     * A layout from Copy settings, or null if [text] isn't one: it must be a JSON object with an
-     * items list, or any JSON at all (`{}`, another app's settings) would replace the bar with an
-     * empty one. An older layout comes through the same migrations; a repeated item id keeps its first.
-     */
-    fun parseLayout(text: String): BarConfig? = runCatching {
-        val root = json.parseToJsonElement(text)
-        if ((root as? kotlinx.serialization.json.JsonObject)?.get("items") !is kotlinx.serialization.json.JsonArray) return null
-        json.decodeFromJsonElement(BarConfig.serializer(), root).let {
-            if (it.version < 2) it.copy(version = 2, autoCollapseSec = if (it.autoCollapseSec == 8) 0 else it.autoCollapseSec) else it
-        }.migrateToV3().let { it.copy(items = it.items.distinctBy { item -> item.id }) }
-    }.getOrNull()
+    /** Backup's offer is answered with no: gone, also from under a stored layout that was never edited since, or the next start would keep it again. */
+    fun discardSetAside() {
+        val raw = prefs.string(KEY_UNREADABLE) ?: return
+        val stale = prefs.string(KEY) == raw
+        prefs.edit {
+            remove(KEY_UNREADABLE)
+            if (stale) put(KEY, layoutJson.encodeToString(BarConfig.serializer(), state.value))
+        }
+        setAsideState.value = null
+    }
 
     private fun save(c: BarConfig) {
-        prefs.edit().putString(KEY, json.encodeToString(BarConfig.serializer(), c)).apply()
+        prefs.edit { put(KEY, layoutJson.encodeToString(BarConfig.serializer(), c)) }
     }
 }
 
@@ -157,14 +226,17 @@ object Store {
 object Defaults {
     /**
      * A calm first bar, left to right: the next meeting (only when one is near), the calendar, a
-     * timer and keep awake. Everything else is one click away in Add.
+     * timer and keep awake. Everything else is one click away in the library. It starts in Left, after the clock, and
+     * says so for each item and for the layout: the fields' own defaults ([ItemConfig.area], [BarConfig.position]) are
+     * Right and stay Right, since they are what a stored layout that names no area is read by.
      */
     fun config() = BarConfig(
         items = listOf(
-            ItemConfig(Store.newId(), "event", Section.HIDDEN, whenActive = true),
-            ItemConfig(Store.newId(), "calendar", Section.SHOWN, display = Display.ICON),
-            ItemConfig(Store.newId(), "timer", Section.SHOWN, display = Display.ICON),
-            ItemConfig(Store.newId(), "caffeine", Section.SHOWN, display = Display.ICON),
+            ItemConfig(Store.newId(), "event", Section.HIDDEN, whenActive = true, area = Position.LEFT),
+            ItemConfig(Store.newId(), "calendar", Section.SHOWN, display = Display.ICON, area = Position.LEFT),
+            ItemConfig(Store.newId(), "timer", Section.SHOWN, display = Display.ICON, area = Position.LEFT),
+            ItemConfig(Store.newId(), "caffeine", Section.SHOWN, display = Display.ICON, area = Position.LEFT),
         ),
+        position = Position.LEFT,
     )
 }

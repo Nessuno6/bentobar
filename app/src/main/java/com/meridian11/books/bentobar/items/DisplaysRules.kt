@@ -1,7 +1,6 @@
 package com.meridian11.books.bentobar.items
 
 import com.meridian11.books.bentobar.data.ItemConfig
-import com.meridian11.books.bentobar.data.Section
 import com.meridian11.books.bentobar.util.Sym
 import kotlin.math.max
 import kotlin.math.min
@@ -70,9 +69,14 @@ object DisplaysRules {
         return Bar(Sym.DESKTOP_WINDOWS, filled = true, text = text, active = true, desc = desc, tooltip = desc)
     }
 
-    /** Whether any non-Off Displays item asks to keep the screen awake while an external display is connected. */
-    fun wantAwake(items: List<ItemConfig>, screens: List<Screen>): Boolean =
-        screens.any { !it.builtIn } && items.any { it.type == "displays" && it.section != Section.OFF && it.optBool("awake", false) }
+    /**
+     * Whether a Displays item asks to keep the screen awake while an external display is connected. From
+     * the layout alone: the item may be folded behind ‹, or the bar hidden, with nothing sampling it.
+     */
+    fun ruleOn(items: List<ItemConfig>): Boolean = items.any { it.type == "displays" && it.optBool("awake", false) }
+
+    /** Whether the screen is to be kept awake: [ruleOn], with an external display connected. */
+    fun wantAwake(items: List<ItemConfig>, screens: List<Screen>): Boolean = screens.any { !it.builtIn } && ruleOn(items)
 
     /** Debug staging (`displays stage 4k|dual|none`). */
     fun staged(name: String): List<Screen>? = when (name) {

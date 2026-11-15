@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Device batteries' link to the user's other device (items/Link). -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="link_picker_title">Show batteries from another device</string>
     <string name="link_open">Show another device\'s batteries</string>
     <string name="link_again">Link to %1$s again</string>

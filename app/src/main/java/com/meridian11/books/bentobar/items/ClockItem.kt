@@ -1,5 +1,14 @@
 package com.meridian11.books.bentobar.items
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.semantics.heading
+import com.meridian11.books.bentobar.ui.Hairline
+import com.meridian11.books.bentobar.ui.Space
+import com.meridian11.books.bentobar.ui.Bento
+import com.meridian11.books.bentobar.ui.ButtonKind
+import com.meridian11.books.bentobar.ui.BentoButton
 import android.content.Intent
 import android.provider.AlarmClock
 import android.provider.CalendarContract
@@ -10,22 +19,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -50,7 +55,6 @@ import com.meridian11.books.bentobar.R
 import com.meridian11.books.bentobar.data.ItemConfig
 import com.meridian11.books.bentobar.data.Store
 import com.meridian11.books.bentobar.data.WorldCity
-import com.meridian11.books.bentobar.ui.Body
 import com.meridian11.books.bentobar.ui.ChoiceRow
 import com.meridian11.books.bentobar.ui.MenuCard
 import com.meridian11.books.bentobar.ui.MenuDivider
@@ -58,7 +62,6 @@ import com.meridian11.books.bentobar.ui.MenuEntry
 import com.meridian11.books.bentobar.ui.MenuNote
 import com.meridian11.books.bentobar.ui.SearchField
 import com.meridian11.books.bentobar.ui.SearchStatus
-import com.meridian11.books.bentobar.ui.SectionLabel
 import com.meridian11.books.bentobar.ui.SmallIconButton
 import com.meridian11.books.bentobar.ui.SwitchRow
 import com.meridian11.books.bentobar.ui.TextRow
@@ -76,7 +79,7 @@ import java.util.TimeZone
 // The Clock item and its World clock menu: the places, Plan a time, adding and removing cities. What
 // the menu says is worked out in WorldClock.kt and PlanATime.kt, which are pure and unit-tested.
 
-private fun is24(item: ItemConfig) = when (item.opt("hours", "system")) {
+private fun is24(item: ItemConfig) = when (ClockItem.hours.of(item)) {
     "24" -> true
     "12" -> false
     else -> DateFormat.is24HourFormat(Env.app)
@@ -102,17 +105,22 @@ private fun words(h24: Boolean) = WorldClock.Words(
 )
 
 object ClockItem : ItemType("clock", R.string.item_clock_title, Sym.SCHEDULE, R.string.item_clock_desc) {
+    override val group = ItemGroup.TIME
     // A rule without a number: a clock of home that shows only while the device is somewhere else.
     override val canBeActive = true
     override val trigger = Trigger(R.string.trigger_clock, R.string.trigger_clock_short)
+    /** The name before the time. */
+    val label = Opt.text("label", 12)
+    val seconds = Opt.bool("seconds", true)
+    val hours = Opt.oneOf("hours", "system", "system", "24", "12")
 
     override fun state(item: ItemConfig): ItemState {
         val zone = zoneOf(item)
         val now = Now.wall()
-        val time = formatTime(Instant.ofEpochMilli(now).atZone(zone), is24(item), item.optBool("seconds", true))
-        val label = item.opt("label", "")
-        return ItemState(icon = Sym.SCHEDULE, text = if (label.isBlank()) time else "$label $time", widthKey = "clock",
-            desc = "${label.ifBlank { WorldClock.cityOf(zone.id) }} $time",
+        val time = formatTime(Instant.ofEpochMilli(now).atZone(zone), is24(item), seconds.of(item))
+        val name = label.of(item)
+        return ItemState(icon = Sym.SCHEDULE, text = if (name.isBlank()) time else "$name $time", widthKey = "clock",
+            desc = "${name.ifBlank { WorldClock.cityOf(zone.id) }} $time",
             // Asked only of a clock that has the rule on and a zone of its own: one that follows the device is never away.
             active = item.whenActive && item.options["zone"] != null && WorldClock.away(zone, ZoneId.systemDefault(), now))
     }
@@ -121,15 +129,15 @@ object ClockItem : ItemType("clock", R.string.item_clock_title, Sym.SCHEDULE, R.
 
     override val options: @Composable (ItemConfig, (ItemConfig) -> Unit) -> Unit = { item, set ->
         ZonePicker(item.options["zone"]) { set(item.with("zone", it)) }
-        TextRow(stringResource(R.string.option_label), item.opt("label", ""), help = stringResource(R.string.clock_label_help),
+        TextRow(stringResource(R.string.option_label), label.of(item), help = stringResource(R.string.clock_label_help),
             placeholder = stringResource(R.string.option_none), maxLength = 12) {
-            set(item.with("label", it.take(12).ifBlank { null }))
+            set(label.set(item, it))
         }
         ChoiceRow(stringResource(R.string.clock_hours), listOf("system" to stringResource(R.string.option_like_system),
-            "24" to stringResource(R.string.clock_hours_24), "12" to stringResource(R.string.clock_hours_12)), item.opt("hours", "system")) {
-            set(item.with("hours", it))
+            "24" to stringResource(R.string.clock_hours_24), "12" to stringResource(R.string.clock_hours_12)), hours.of(item)) {
+            set(hours.set(item, it))
         }
-        SwitchRow(stringResource(R.string.clock_seconds), item.optBool("seconds", true)) { set(item.with("seconds", it.toString())) }
+        SwitchRow(stringResource(R.string.clock_seconds), seconds.of(item)) { set(seconds.set(item, it)) }
         CitiesInSettings()
     }
 }
@@ -150,7 +158,7 @@ private fun WorldClockMenu(item: ItemConfig, host: MenuHost) {
     val words = remember(h24) { words(h24) }
     // The places keep their zones. They are looked up again when the list changes and once a minute (their order is that
     // of the offsets right now), not for every frame of the slider: Android keeps the rules of only a few zones at hand.
-    val clocks = cfg.items.filter { it.type == "clock" }.map { it.options["zone"] to it.opt("label", "") }
+    val clocks = cfg.items.filter { it.type == "clock" }.map { it.options["zone"] to ClockItem.label.of(it) }
     val places = remember(local, clocks, cfg.cities, now / 60_000) {
         WorldClock.places(local, clocks.map { (zone, label) -> WorldClock.Clock(WorldClock.zone(zone) ?: local, label) }, cfg.cities, now)
     }
@@ -312,10 +320,11 @@ private fun AddCity(cities: List<WorldCity>, places: List<WorldClock.Place>, now
 @Composable
 private fun CitiesInSettings() {
     val cfg by Store.config.collectAsState()
-    Spacer(Modifier.height(4.dp))
-    SectionLabel(stringResource(R.string.clock_cities_section))
-    if (cfg.cities.isEmpty()) { Body(stringResource(R.string.clock_cities_empty)); return }
-    Body(stringResource(R.string.clock_cities_help))
+    Hairline()
+    Text(stringResource(R.string.clock_cities_section), Modifier.semantics { heading() }, style = Bento.type.strong, color = Bento.colors.ink)
+    Text(stringResource(if (cfg.cities.isEmpty()) R.string.clock_cities_empty else R.string.clock_cities_help), Modifier.padding(top = 2.dp, bottom = Space.xs),
+        style = Bento.type.help, color = Bento.colors.ink2)
+    if (cfg.cities.isEmpty()) return
     // The menu's order, worked out when a city comes or goes and not with every letter of a name: among cities of one
     // offset the names decide, and the row being named would move away under the typing.
     val order = remember(cfg.cities.map { it.zone }) { WorldClock.ordered(cfg.cities, Now.wall()).map { it.zone } }
@@ -329,10 +338,8 @@ private fun CitiesInSettings() {
                         Store.update { it.copy(cities = WorldClock.rename(it.cities, city.zone, typed)) }
                     }
                 }
-                TextButton(onClick = { Store.update { it.copy(cities = WorldClock.remove(it.cities, city.zone)) } },
-                    modifier = Modifier.semantics { contentDescription = remove }) {
-                    Text(stringResource(R.string.clock_city_remove), color = MaterialTheme.colorScheme.error)
-                }
+                BentoButton(stringResource(R.string.clock_city_remove), { Store.update { it.copy(cities = WorldClock.remove(it.cities, city.zone)) } },
+                    Modifier.semantics { contentDescription = remove }, kind = ButtonKind.TEXT)
             }
         }
     }
@@ -344,14 +351,14 @@ fun ZonePicker(current: String?, onPick: (String?) -> Unit) {
     var query by remember { mutableStateOf("") }
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Text(current?.let { stringResource(R.string.clock_zone_named, WorldClock.cityOf(it), it) } ?: stringResource(R.string.clock_zone_device),
-            style = MaterialTheme.typography.labelLarge)
+            style = Bento.type.strong, color = Bento.colors.ink)
         TextRow(stringResource(R.string.clock_zone_find), query, placeholder = stringResource(R.string.clock_zone_find_hint)) { query = it }
         if (query.length >= 2) {
             val q = query.trim().replace(' ', '_').lowercase(Locale.ROOT)
             val hits = ZoneId.getAvailableZoneIds().filter { it.lowercase(Locale.ROOT).contains(q) && it.contains('/') }.sorted().take(8)
             hits.forEach { id -> MenuEntry(Sym.PUBLIC, WorldClock.cityOf(id), id) { onPick(id); query = "" } }
-            if (hits.isEmpty()) Text(stringResource(R.string.clock_zone_none), style = MaterialTheme.typography.bodySmall)
+            if (hits.isEmpty()) Text(stringResource(R.string.clock_zone_none), style = Bento.type.help, color = Bento.colors.ink2)
         }
-        if (current != null) TextButton(onClick = { onPick(null) }) { Text(stringResource(R.string.clock_zone_use_device)) }
+        if (current != null) BentoButton(stringResource(R.string.clock_zone_use_device), { onPick(null) }, Modifier.offset(x = -Space.m), kind = ButtonKind.TEXT)
     }
 }

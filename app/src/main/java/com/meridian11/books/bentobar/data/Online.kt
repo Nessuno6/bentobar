@@ -61,6 +61,13 @@ object Online {
         } catch (e: Exception) {
             null
         } ?: Saved()
+        // A service only a retired item asked (Crypto's Kraken, Value from a URL's "Your own addresses") is no service any
+        // more: its switch is read as nothing and the file is written again without it. The directory of what it sent, if
+        // there is one, is deleted, and so is what a retired type kept for its items (a Shelf's texts, the addresses of
+        // Value from a URL): no code is left that would read or delete them.
+        val retired = Retired.services.filter { it in saved.on || it in saved.setUp || it in saved.keys }
+        for (id in Retired.services) runCatching { File(noBackupDir, "fetched/$id").deleteRecursively() }
+        for (name in Retired.kept) runCatching { File(noBackupDir, "kept/$name").deleteRecursively() }
         fun services(ids: List<String>) = Service.entries.filterTo(HashSet()) { it.id in ids }
         for (s in Service.entries) saved.keys[s.id]?.trim()?.takeIf { it.isNotEmpty() }?.let { keys[s] = it }
         val keyed = keys.keys.toSet()
@@ -71,6 +78,7 @@ object Online {
             setUp = services(saved.setUp).filterTo(HashSet()) { !it.needsKey } + keyed + on,
             keyed = keyed,
         )
+        if (retired.isNotEmpty()) save(lost = false)
     }
 
     fun on(service: Service): Boolean = service in current.value.on
@@ -84,6 +92,14 @@ object Online {
     fun serviceOf(host: Host): Service = Service.entries.first { host in it.hosts }
 
     /**
+     * Whether [service] may be asked right now: it is switched on for this install, something that shows items is on
+     * screen ([running]), and the layout has an item of a type that asks it ([asks], by the item's type). The one rule
+     * behind `Http.allowed`, which the app wires to it.
+     */
+    fun mayAsk(service: Service, running: Boolean, items: List<ItemConfig>, asks: (type: String) -> Service?): Boolean =
+        on(service) && running && items.any { asks(it.type) == service }
+
+    /**
      * On, by the user's own act: Search, Use my location or "Turn on" in the item, or Setup's switch for a
      * service that was set up here. False (and nothing changes) for a service that needs a key and has none.
      */
@@ -93,7 +109,7 @@ object Online {
         val s = current.value
         if (service in s.on && service in s.setUp) return true
         current.value = s.copy(on = s.on + service, setUp = s.setUp + service)
-        save()
+        save(lost = false)
         return true
     }
 
@@ -103,7 +119,7 @@ object Online {
             val s = current.value
             if (service !in s.on) return
             current.value = s.copy(on = s.on - service)
-            save()
+            save(lost = true)
         }
         forget(service)
     }
@@ -120,7 +136,7 @@ object Online {
         keys[service] = k
         val s = current.value
         current.value = s.copy(on = s.on + service, setUp = s.setUp + service, keyed = s.keyed + service)
-        save()
+        save(lost = false)
         return true
     }
 
@@ -130,7 +146,7 @@ object Online {
             if (keys.remove(service) == null && service !in current.value.keyed) return
             val s = current.value
             current.value = s.copy(on = s.on - service, setUp = s.setUp - service, keyed = s.keyed - service)
-            save()
+            save(lost = true)
         }
         forget(service)
     }
@@ -141,12 +157,13 @@ object Online {
     }
 
     /**
-     * The whole file, written beside itself and renamed, so it is never half written. If that fails
-     * (a full disk), the file is removed instead, which needs no room: left as it was, it would bring
-     * back a switch that was turned off or a key that was removed at the next start. What holds now
-     * holds for this run; the next start finds nothing set up. Nothing of it is logged (a key is in it).
+     * The whole file, written beside itself and renamed, so it is never half written. If that fails (a
+     * full disk) and something was [lost] (a switch turned off, a key removed), the file is removed
+     * instead, which needs no room: left as it was, it would bring that back at the next start. After
+     * turning something on the old file stays: nothing it says is untrue, and a full disk must not
+     * cost every other switch and key. What holds now holds for this run. Nothing of it is logged (a key is in it).
      */
-    private fun save() {
+    private fun save(lost: Boolean) {
         val target = file ?: return
         val part = File(target.parentFile, target.name + ".part")
         val saved = try {
@@ -160,7 +177,7 @@ object Online {
         }
         if (!saved) {
             runCatching { part.delete() }
-            runCatching { target.delete() }
+            if (lost) runCatching { target.delete() }
         }
     }
 }

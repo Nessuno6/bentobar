@@ -2,14 +2,12 @@ package com.meridian11.books.bentobar.bar
 
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
-import android.app.WallpaperManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.view.Display
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
-import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
@@ -22,48 +20,76 @@ import android.view.MotionEvent
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import com.meridian11.books.bentobar.data.ColorMode
 import com.meridian11.books.bentobar.data.HiddenMode
-import com.meridian11.books.bentobar.data.shows
+import com.meridian11.books.bentobar.data.areasInUse
+import com.meridian11.books.bentobar.data.asRightArea
+import com.meridian11.books.bentobar.data.carrierOverflow
+import com.meridian11.books.bentobar.data.chevronOpensMenu
+import com.meridian11.books.bentobar.data.stripPlan
 import com.meridian11.books.bentobar.data.behindChevron
+import com.meridian11.books.bentobar.data.homeArea
 import com.meridian11.books.bentobar.data.moved
+import com.meridian11.books.bentobar.data.owedIds
 import com.meridian11.books.bentobar.data.ItemConfig
 import com.meridian11.books.bentobar.data.Pill
 import com.meridian11.books.bentobar.data.Position
 import com.meridian11.books.bentobar.data.BarConfig
+import com.meridian11.books.bentobar.data.ROOM_ORDER
+import com.meridian11.books.bentobar.data.Screens
 import com.meridian11.books.bentobar.data.Section
 import com.meridian11.books.bentobar.data.Store
-import com.meridian11.books.bentobar.data.TextSize
-import com.meridian11.books.bentobar.items.Caffeine
 import com.meridian11.books.bentobar.items.Chips
 import com.meridian11.books.bentobar.items.DisplaysItem
 import com.meridian11.books.bentobar.items.Env
 import com.meridian11.books.bentobar.items.Items
-import com.meridian11.books.bentobar.items.MenuHost
+import com.meridian11.books.bentobar.items.Settle
 import com.meridian11.books.bentobar.items.Ticker
-import com.meridian11.books.bentobar.ui.MainActivity
-import com.meridian11.books.bentobar.ui.MenuRoom
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.util.concurrent.Executors
 
 /**
- * BentoBar's accessibility service. It reads only SystemUI's status bar window (layout and text
- * colour), draws BentoBar's items in overlay windows on top of it, and performs the global
- * actions of the Tools menu when asked. It doesn't observe keys, touches or other apps' windows.
+ * BentoBar's accessibility service. It reads SystemUI's status bar window (layout and text colour)
+ * and, of other windows, where they are and never what is in them; it draws BentoBar's items in
+ * overlay windows on top of the bar, and performs the global actions of the Tools menu when asked.
+ * It doesn't observe keys or touches.
  */
 class BarService : AccessibilityService() {
+    companion object {
+        const val TAG = "BentoBar"
+
+        /** The connected service, or null. Only bar/ may hold it; the rest of the app asks [global] or Env.running. */
+        @Volatile var current: BarService? = null
+            private set
+
+        /** One of the Tools and Shortcut menu's global actions (Back, Home, Recents...), false with no service. */
+        fun global(action: Int): Boolean = current?.performGlobalAction(action) ?: false
+
+        /** Closes the popup last opened for another app's item, if it is still open. */
+        fun closeSharedItem() {
+            current?.controller()?.closeShared()
+        }
+
+        /** Opens a shared item's popup at [at] on screen; returns whether the service is up. */
+        fun openSharedItem(id: String, at: Rect, hover: Boolean): Boolean {
+            val ctrl = current?.controller() ?: return false
+            ctrl.openAt(id, at, hover = hover)
+            return true
+        }
+    }
+
     private var bar: BarController? = null
     /** A strip on each external display's desktop taskbar (DeX), by display id. */
     private val desks = HashMap<Int, BarController>()
@@ -89,7 +115,7 @@ class BarService : AccessibilityService() {
 
     override fun onServiceConnected() {
         Env.init(this)
-        Env.service = this
+        current = this
         bar?.stop() // connected again without an unbind: the old strip's windows mustn't stay up
         bar = BarController(this).also { it.start() }
         runCatching { displayManager.registerDisplayListener(displays, android.os.Handler(mainLooper)) }
@@ -118,10 +144,13 @@ class BarService : AccessibilityService() {
     private fun shutdown() {
         val stopping = bar
         bar = null // first: whatever stop() does, it runs once per controller
+        // While the controller is still there, once for it: what a type holds beyond the bar (a mute, an endless Focus) ends
+        // with the service. A rebind ends it too: it can't be told from an ending.
+        if (stopping != null) for (t in Items.all) Ticker.guarded(t, "settle") { t.settle(Settle.SERVICE_ENDING) }
         stopping?.stop()
         runCatching { displayManager.unregisterDisplayListener(displays) }
         desks.values.forEach { it.stop() }; desks.clear()
-        if (Env.service === this) Env.service = null
+        if (current === this) current = null
         Chips.update(this)
         com.meridian11.books.bentobar.ui.Setup.refresh(this)
     }
@@ -129,17 +158,13 @@ class BarService : AccessibilityService() {
     fun controller(): BarController? = bar
     /** The strip on another display's taskbar, if there is one. */
     fun controller(displayId: Int): BarController? = desks[displayId]
-
-    companion object { const val TAG = "BentoBar" }
 }
 
-/** Item types still shown while presenting (when active): a running timer, a meeting about to start. */
-private val PRESENTING_TYPES = setOf("timer", "countdown", "event")
-
 /**
- * One strip and its popups on one display: the device's own screen ([displayId] the default), in its status bar, or an
- * external display's desktop taskbar along the bottom ([desk]: Samsung DeX, which has no status bar there), where the
- * strip ends right before the system icons and popups open above it.
+ * One strip (or one strip per area on the device's own screen) and its popups on one display: the device's own
+ * screen ([displayId] the default), in its status bar, or an external display's desktop taskbar along the bottom
+ * ([desk]: Samsung DeX, which has no status bar there), where the strip ends right before the system icons and popups
+ * open above it.
  */
 class BarController(private val service: AccessibilityService, val displayId: Int = Display.DEFAULT_DISPLAY) {
     private val desk = displayId != Display.DEFAULT_DISPLAY
@@ -151,15 +176,8 @@ class BarController(private val service: AccessibilityService, val displayId: In
     private val who = if (desk) "bar$displayId" else "bar"
     /** Items that don't fit this strip: the app's own list for the device's screen, one of its own on another display. */
     private val overflow = if (desk) kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet()) else BarOverflow.ids
-    /** What the app's settings say of the strip: the device's screen's alone. */
-    private var status: BarStatus
-        get() = BarStatus.current.value
-        set(v) { if (!desk) BarStatus.current.value = v }
-    /** Where the strip sits: against the system icons, always, on a taskbar. */
-    private fun position(cfg: BarConfig) = if (desk) Position.RIGHT else cfg.position
     /** "Show on" lets this display have a strip. */
-    private fun wanted(cfg: BarConfig) = cfg.screens == com.meridian11.books.bentobar.data.Screens.ALL ||
-        (cfg.screens == com.meridian11.books.bentobar.data.Screens.OTHER) == desk
+    private fun wanted(cfg: BarConfig) = cfg.screens == Screens.ALL || (cfg.screens == Screens.OTHER) == desk
     /**
      * The display's size. A display context isn't a window's: its window manager measures the device's own screen,
      * so another display's size is asked of the display itself.
@@ -172,9 +190,6 @@ class BarController(private val service: AccessibilityService, val displayId: In
     private val wm = ctx.getSystemService(WindowManager::class.java)
     private val pm = service.getSystemService(PowerManager::class.java)
     private val km = service.getSystemService(KeyguardManager::class.java)
-    private val io = Executors.newSingleThreadExecutor()
-    /** [io] for screenshot results; one arriving after stop() shut it down is dropped, not thrown. */
-    private val callbacks = java.util.concurrent.Executor { r -> runCatching { io.execute(r) } }
     private val density get() = ctx.resources.displayMetrics.density
 
     // Read by the strip's composition.
@@ -183,53 +198,111 @@ class BarController(private val service: AccessibilityService, val displayId: In
         var value: Boolean
             get() = state.value
             set(v) {
-                state.value = v; Ticker.revealHidden = v || menuKey == "bentobar"; if (v) Ticker.refresh()
+                state.value = v; Ticker.revealHidden = v || menus.menuKey == MenuKey.Bar; if (v) Ticker.refresh()
                 // Out: a click anywhere else folds them away again (see [outsideClick]).
-                strip.watchOutside(v)
+                watchOutside()
             }
     }
-    private val look = mutableStateOf(StripLook(Color.White, true, TextSize.DEFAULT, 10.dp, Pill.NONE))
-    private val maxWidth = mutableIntStateOf(0)
+    /** The strip's colours and the readings of the status bar behind them. */
+    private val colors = ColorReader(ctx, main, object : ColorReader.Facts {
+        override val started get() = this@BarController.started
+        override val onScreen get() = strips.any { it.shown }
+        override val empty get() = stripEmpty
+        override val interactive get() = pm.isInteractive
+        override val snapshot get() = snap
+    }, updateLiveLook = !desk, tag = tag) { s, done -> StatusBarScan.shoot(service, s, done) }
+    private val look get() = colors.look
+    /** The room the first strip has: none (0) is what the status calls no room. Each strip's own room is its [AreaStrip.maxWidth]. */
+    private val firstBudget = mutableIntStateOf(0)
     private val heightDp = mutableStateOf(36.dp)
 
-    private val strip = Overlay(ctx, if (desk) "BentoBar $displayId" else "BentoBar", onOutside = { outsideClick() }).apply { params.width = 1; watchOutside(false) }
+    /** A strip for each area, in room order. On screen are those of the areas in use that have room. */
+    private val strips = ROOM_ORDER.map { area ->
+        val title = when (area) {
+            Position.RIGHT -> if (desk) "BentoBar $displayId" else "BentoBar"
+            Position.LEFT -> if (desk) "BentoBar $displayId left" else "BentoBar left"
+            Position.CENTER -> if (desk) "BentoBar $displayId middle" else "BentoBar middle"
+        }
+        AreaStrip(area, Overlay(ctx, title, onOutside = { outsideClick(it) }).apply { params.width = 1; watchOutside(false) })
+    }
+    /** The area whose strip does what the bar does once: the first one placed. State: a strip that becomes it is composed again. */
+    private var carrier by mutableStateOf(ROOM_ORDER.first())
+    private fun carrierStrip() = strips.first { it.area == carrier }
+    /** The areas in use that have no room right now: their items are on no strip. */
+    private val owed = mutableStateOf(emptySet<Position>())
+    /** What those areas would draw now, as the first strip last said it: its ‹ is for them, and its menu lists them. */
+    private var owedItems = emptySet<String>()
+    /**
+     * The areas whose strip is on view: on screen, measured and with something to draw. Not [AreaStrip.draws], which also
+     * counts a strip that has not been measured yet. The empty capsule is the home area's only while no other is among them.
+     */
+    private val onView = mutableStateOf(emptySet<Position>())
+    /** The areas placed, in room order: the strips whose window may keep the screen on ([KeepAwakeRule.holder]). */
+    private var placedAreas: List<Position> = emptyList()
 
-    /** A click outside the strip while hidden items are out folds them away, unless a menu is open (it closes itself). */
-    private fun outsideClick() {
-        if (menuKey != null || !expanded.value) return
+    /** The strip's window that keeps the screen on now: the first placed that is visible. Null when none is. */
+    private fun awakeWindow(): Overlay? =
+        KeepAwakeRule.holder(placedAreas, strips.associate { it.area to it.state() })?.let { area -> strips.first { it.area == area }.window }
+
+    /** Keep awake: a flag on the visible strip's window, a wake lock while no strip is visible to carry it. */
+    private val awake = KeepAwake(main, pm, km, scope, strips.map { it.window }, enabled = !desk) { awakeWindow() }
+
+    /**
+     * Presses outside the bar are heard by one strip's window alone (the first on view: [PopupRules.watchingArea]), and
+     * only while hidden items are out: one press is heard once, in however many windows the bar is. Asked again when
+     * hidden items come out or go, when the first strip is another and when what is on view changes.
+     */
+    private fun watchOutside() {
+        val watching = PopupRules.watchingArea(onView.value, carrier)
+        for (strip in strips) strip.watchOutside(expanded.value && strip.area == watching)
+    }
+
+    /**
+     * The strip a press at [x], [y] on the screen landed on, of those on view (a press where an invisible window lies goes
+     * to what is below it, and is not on the bar); null for a press on none of them.
+     */
+    private fun stripAt(x: Float, y: Float): AreaStrip? {
+        val height = snap?.bar?.height() ?: 0
+        val seen = strips.filter { it.area in onView.value }
+        val area = PopupRules.pressedArea(x, y, seen.map { s -> s.locationOnScreen().let { StripFrame(s.area, it[0], it[1], s.params.width, height) } })
+        return seen.firstOrNull { it.area == area }
+    }
+
+    /**
+     * A click outside the bar while hidden items are out folds them away, unless a menu is open (it closes itself). To
+     * the window that hears it a press on another strip is outside too: that one is on the bar, and is that strip's own.
+     */
+    private fun outsideClick(ev: MotionEvent) {
+        if (menus.menuKey != null || !expanded.value) return
+        if (stripAt(ev.rawX, ev.rawY) != null) return
+        fold()
+    }
+
+    /** Hidden items go back behind ‹ and stay there: with their pin gone too, or the next start of the service opens them with no click. */
+    private fun fold() {
         expanded.value = false; pinned = false
         if (Store.config.value.pinnedOpen) Store.update { it.copy(pinnedOpen = false) }
     }
-    private var menu: MenuWindow? = null
-    /** On a taskbar: the popup just left for another, up until that one starts to rise ([closeMenu]). */
-    private var handOff: MenuWindow? = null
-    private val dropHandOff: Runnable = object : Runnable {
-        override fun run() { main.removeCallbacks(this); handOff?.close(now = true); handOff = null }
-    }
-    /** The new popup is rising: the one it replaces dissolves now. */
-    private fun dissolveHandOff() { main.removeCallbacks(dropHandOff); handOff?.close(dissolve = true); handOff = null }
-    // Observable, so the strip's highlight can stay on the item whose popup is open (StripHost).
-    private var menuKey: String? by mutableStateOf(null)
-    /**
-     * The popup a press on its own item just closed: that press's click, which reaches the strip after the
-     * popup heard of the press, is spent (it would open the popup again). Only that one click, and only for a
-     * moment: a second click turns the popup round while it is still folding away.
-     */
-    private var spentKey: String? = null
-    private var spentAt = 0L
-    /** A popup still folding away, and its key: clicked again meanwhile, it turns round. */
-    private var leaving: MenuWindow? = null
-    private var leavingKey: String? = null
-    /** It is folding away so that something can run once it is off the screen (a screenshot): it doesn't turn round. */
-    private var leavingThen = false
     private var snap: BarSnapshot? = null
-    private var sampled: BarColors? = null
     private var overlayIds = emptySet<Int>()
-    private var hovering = false
+    /** The areas whose strip the pointer is over: an Exit from one strip can arrive after the Enter of the next. */
+    private var hoverAreas = emptySet<Position>()
+    /** The pointer is over the bar. */
+    private val hovering get() = hoverAreas.isNotEmpty()
     private var pinned = false
     private var started = false
-    /** Where each item was last drawn (window coordinates), for anchoring menus from tests. */
-    val placed = HashMap<String, Rect>()
+    /** The bar is on screen as far as the last look at it said. A strip's measure can arrive after the bar has left. */
+    private var showing = false
+
+    /** The popups and the tooltip. */
+    private val menus: MenuCoordinator = MenuCoordinator(ctx, main, wm, object : MenuCoordinator.Facts {
+        override val snapshot get() = snap
+        override val screenBounds get() = this@BarController.screenBounds()
+        override val expanded get() = this@BarController.expanded.value
+        override fun stripAt(x: Float, y: Float) = this@BarController.stripAt(x, y)
+        override fun stripOf(id: String) = strips.firstOrNull { id in it.placed }
+        override fun popupClosed() { if (!hovering && !pinned) { main.removeCallbacks(collapse); main.postDelayed(collapse, 600) } }
+    }, desk = desk, overflowIds = overflow)
 
     private val scanNow = Runnable { scan() }
     private val quickCheck = Runnable { check(full = false) }
@@ -240,48 +313,62 @@ class BarController(private val service: AccessibilityService, val displayId: In
     private val poll = object : Runnable {
         override fun run() {
             if (!pm.isInteractive) return // screen off: nothing to show; SCREEN_ON restarts this
-            if (strip.shown) lightCheck() else check(full = false)
-            main.postDelayed(this, if (strip.shown) 2_000 else 5_000)
+            val shown = strips.any { it.shown }
+            if (shown) lightCheck() else check(full = false)
+            main.postDelayed(this, if (shown) 2_000 else 5_000)
         }
     }
     private var lastFullScan = 0L
     private var lastTaskbar: Int? = -1
+    /** The desktop bar's spacer node at the last scan: refreshing just this is a cheap "did anything move?" check. */
+    private var spacerNode: AccessibilityNodeInfo? = null
     /** The app windows against the bar's lower edge and under the bar, as [check] last saw them. */
     private var neighbours = BarNeighbours()
 
     private fun lightCheck() {
         val s = snap ?: return scan()
-        val node = s.spacerNode
-        // A bar without the DesktopStatusBarSpacer node has nothing cheap to re-check: a full scan
-        // (with clearCache) every 2 s is costly, so between full scans only the window list is read.
-        if (node == null) return if (SystemClock.uptimeMillis() - lastFullScan > 10_000) scan() else check(full = false)
-        if (SystemClock.uptimeMillis() - lastFullScan > 30_000 || !node.refresh()) return scan()
+        val node = spacerNode
+        val step = BarRules.lightLook(hasSpacer = node != null, sinceFullMs = SystemClock.uptimeMillis() - lastFullScan)
+        if (step == BarRules.LightLook.FULL) return scan()
+        if (node == null || step == BarRules.LightLook.WINDOWS) return check(full = false)
+        if (!node.refresh()) return scan()
         // Against the spacer's own last bounds: with the spacer squeezed to nothing, the free area is
         // the widest gap instead, and comparing with that would run a full scan every time.
         val r = Rect().also { node.getBoundsInScreen(it) }
-        if (r != s.spacer) scan()
+        if (r.box() != s.spacer) scan()
     }
     private val expandOnHover = Runnable { if (hovering) expanded.value = true }
     private val collapse: Runnable = object : Runnable {
         override fun run() {
             // A slider held by a pointer that has wandered off the strip: its item stays where it is until it lets go.
             if (sliding) { main.postDelayed(this, 300); return }
-            if (!hovering && menuKey == null && expanded.value) {
+            if (!hovering && menus.menuKey == null && expanded.value) {
                 Log.i(tag, "collapse (pinned=$pinned autoCollapse=${Store.config.value.autoCollapseSec}s)")
-                expanded.value = false; pinned = false
-                if (Store.config.value.pinnedOpen) Store.update { it.copy(pinnedOpen = false) }
+                fold()
             }
+        }
+    }
+    /**
+     * The pointer came onto the bar or left it ([inside]), whichever strip said so: what a hover brings out, and what
+     * its end lets fold away. A hover ends here only, for the pointer going and for the last strip under it going.
+     */
+    private fun barHover(inside: Boolean) {
+        main.removeCallbacks(expandOnHover); main.removeCallbacks(collapse)
+        if (inside) {
+            if (Store.config.value.hiddenMode == HiddenMode.HOVER && !expanded.value && hiddenItems().isNotEmpty()) main.postDelayed(expandOnHover, 350)
+        } else if (!pinned) main.postDelayed(collapse, 900)
+        else {
+            val secs = Store.config.value.autoCollapseSec
+            if (secs > 0) main.postDelayed(collapse, secs * 1000L)
         }
     }
     /** A pointer holds an item's slider: between its first report and the one that says `done`. */
     private var sliding = false
-    private val awakeExpiry = Runnable { Caffeine.check() }
-    private val sample = Runnable { sampleColor() }
 
     private val screen = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            if (i.action == Intent.ACTION_SCREEN_OFF) closeMenu(now = true)
-            updateAwake()
+            if (i.action == Intent.ACTION_SCREEN_OFF) menus.closeMenu(now = true)
+            awake.update()
             main.post(scanNow)
             if (i.action == Intent.ACTION_SCREEN_ON) {
                 main.removeCallbacks(poll); main.postDelayed(poll, 2_000)
@@ -290,9 +377,6 @@ class BarController(private val service: AccessibilityService, val displayId: In
             }
         }
     }
-    // A live wallpaper can report new colours every second: a quick cause, two readings.
-    private val wallpaper = WallpaperManager.OnColorsChangedListener { _, _ -> readSoon(ColorWatch.Cause.QUICK, 300) }
-
     fun start() {
         started = true
         // Pinned open with ‹ before a restart: open again.
@@ -300,37 +384,96 @@ class BarController(private val service: AccessibilityService, val displayId: In
         service.registerReceiver(screen, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_USER_PRESENT)
         })
-        runCatching { WallpaperManager.getInstance(service).addOnColorsChangedListener(wallpaper, main) }
+        colors.start()
         scope.launch { Store.config.collect { onConfig() } }
-        scope.launch {
-            Caffeine.until.collect { until ->
-                updateAwake()
-                main.removeCallbacks(awakeExpiry)
-                if (until != 0L && until != Caffeine.FOREVER) main.postDelayed(awakeExpiry, (until - System.currentTimeMillis()).coerceAtLeast(0) + 200)
-            }
-        }
-        scope.launch { DisplaysItem.keepingAwake.collect { updateAwake() } }
+        awake.start()
         scan()
         main.postDelayed(poll, 2_000)
-        armChecks()
+        // Last: what a type left behind when the service last ended, or the process with it (a mute of its own with no such
+        // item placed any more, a Focus session past its end), it gives back now.
+        if (!desk) for (t in Items.all) Ticker.guarded(t, "settle") { t.settle(Settle.SERVICE_STARTED) }
     }
 
     fun stop() {
         if (!started) return // stopped already: the status and the ticker may be a newer controller's by now
         started = false
-        if (!desk) BarLook.current.value = null
-        status = BarStatus.STOPPED
+        if (!desk) {
+            BarLook.current.value = null
+            BarStatus.current.value = BarStatus.STOPPED
+            BarOverflow.ids.value = emptySet()
+            DisplaysItem.follow(false)
+        }
         overflow.value = emptySet()
+        owedItems = emptySet()
         runCatching { service.unregisterReceiver(screen) }
-        runCatching { WallpaperManager.getInstance(service).removeOnColorsChangedListener(wallpaper) }
-        closeMenu(now = true)
-        hideTip(now = true)
+        colors.stop()
+        // Before the strip goes, which would ask keep awake for a wake lock in its place.
+        awake.stop()
+        leaveScreen()
+        // Nothing is revealed once this controller is gone: the ticker outlives it, in the process.
+        if (!desk) Ticker.revealHidden = false
         main.removeCallbacksAndMessages(null) // after closeMenu, which posts a collapse
-        strip.destroy()
-        if (screenLock.isHeld) screenLock.release()
-        Ticker.stop(who)
+        for (strip in strips) strip.window.destroy()
         scope.cancel()
-        io.shutdown()
+    }
+
+    /**
+     * The strip leaves the screen, whatever the reason: the bar it sits in went away, or the service is going. The one
+     * way off it: a new reason, or a new overlay that must go with the strip, is one edit here. The order is load-bearing
+     * (HidePathTest): the popup and the tooltip go before the window that anchors them, the pointer's holds end before
+     * the release or Exit that would have ended them is lost, and the ticker stops last.
+     */
+    private fun leaveScreen() {
+        menus.closeMenu(now = true)
+        menus.hideTip()
+        cancelDrag() // the strip's window goes, and with it the release that would end a drag
+        // and the Exit that would end a hover: what only the pointer held out doesn't come back with the bar.
+        hoverAreas = emptySet(); main.removeCallbacks(expandOnHover)
+        if (!pinned && expanded.value) expanded.value = false
+        showing = false // before the windows go: a measure on its way finds the bar gone
+        for (strip in strips) strip.hide()
+        noteOnView()
+        // Readings still to come were for a strip that is gone: its return asks again.
+        colors.stripLeft()
+        awake.update()
+        if (desk) Ticker.stop(who) else Ticker.stop("bar")
+    }
+
+    /**
+     * One strip's window goes while the bar stays: its area went out of use, or has no room. What hangs from it goes
+     * before the window that anchors it, and what the pointer held in it ends, as when the bar leaves; what it held in
+     * another strip stays. The bar's own ending is [leaveScreen]'s alone.
+     */
+    private fun leave(strip: AreaStrip) {
+        if (!strip.shown) return
+        menus.closeFor(strip)
+        if (dragFrom?.strip === strip) cancelDrag() // its window takes the release with it
+        if (strip.area in hoverAreas) events.getValue(strip).hover(false) // and the Exit
+        strip.hide()
+        strip.dropped = emptySet() // what it had no room for goes with it
+        noteOnView()
+        publishOverflow()
+    }
+
+    /** Which strips are on view is asked again: a strip was measured, or went. The first of them hears a press outside the bar. */
+    private fun noteOnView() {
+        onView.value = strips.filter { it.shown && !it.pending && !it.empty }.mapTo(mutableSetOf()) { it.area }
+        watchOutside()
+    }
+
+    /** The first strip says what the areas with no window would draw now, each time it is composed. */
+    private fun owe(ids: Set<String>) {
+        if (ids != owedItems) { owedItems = ids; publishOverflow() }
+    }
+
+    /**
+     * What has no room right now, for Settings' rows and the ‹ menu: every strip's own and what the areas with no window
+     * are owed, as one set. A ‹ coming or going changes a strip's width, so the bar is looked at again, and only when the
+     * set changed.
+     */
+    private fun publishOverflow() {
+        val ids = strips.flatMapTo(mutableSetOf()) { it.dropped } + owedItems
+        if (overflow.value != ids) { overflow.value = ids; main.post(scanNow) }
     }
 
     /** Window events, logged only where asked for: `adb shell setprop log.tag.BentoBarEvents DEBUG`. */
@@ -344,8 +487,8 @@ class BarController(private val service: AccessibilityService, val displayId: In
                 if (e.windowId in overlayIds) return // our own windows resizing
                 // Another app in front (focus or the active window moved): the bar most often changes now. A check soon,
                 // and quick ones for a while. Other windows coming, going or moving start the quick checks too.
-                if (e.windowChanges and SWITCHED != 0) stir(ColorWatch.SWITCH_MS)
-                else if (e.windowChanges and RELEVANT != 0) stir(ColorWatch.CHECK_FAST_MS)
+                if (e.windowChanges and SWITCHED != 0) colors.stir(ColorWatch.SWITCH_MS)
+                else if (e.windowChanges and RELEVANT != 0) colors.stir(ColorWatch.CHECK_FAST_MS)
                 // Only windows appearing, going or moving can hide or cover the bar; titles, focus
                 // and stacking changes (every page load, every terminal command) can't.
                 if (e.windowChanges and RELEVANT == 0) return
@@ -358,28 +501,39 @@ class BarController(private val service: AccessibilityService, val displayId: In
 
     /** Rotation, density or resolution: a menu or tooltip placed for the old display would be off, so close them. */
     fun onConfigChanged() {
-        closeMenu(now = true); hideTip(now = true)
-        main.postDelayed(scanNow, 200); readSoon(ColorWatch.Cause.SLOW, 500)
+        menus.closeMenu(now = true); menus.hideTip(now = true)
+        main.postDelayed(scanNow, 200); colors.readSoon(ColorWatch.Cause.SLOW, 500)
     }
 
-    private var lastColor: ColorMode? = null
+    private var lastGeometry: BarRules.Geometry? = null
+    private var lastWanted: Boolean? = null
 
     private fun onConfig() {
         if (!started) return
-        // Colour back to "Match the status bar" (or its opposite): read the bar again (nothing else would until it changes).
-        Store.config.value.color.let { if (it != lastColor) { if (it.reads && lastColor != null) readSoon(ColorWatch.Cause.QUICK, 100); lastColor = it } }
-        armChecks()
+        DisplaysItem.follow(true)
+        colors.onConfig()
         // Switched to Show everything (or presenting) with hidden items out: nothing can fold them back.
-        Store.config.value.let { if ((it.hiddenMode == HiddenMode.SHOW_ALL || it.presenting) && expanded.value) { expanded.value = false; pinned = false } }
-        applyLook()
+        Store.config.value.let { if ((it.hiddenMode == HiddenMode.SHOW_ALL || it.presenting) && expanded.value) fold() }
+        colors.applyLook()
         if (Ticker.running) Ticker.refresh()
-        scan()
+        // Every Store write lands here, and a label saves on every key: only what moves the strip asks the bar again.
+        val cfg = Store.config.value
+        val w = wanted(cfg)
+        BarRules.geometry(cfg).let { if (it != lastGeometry || w != lastWanted) { lastGeometry = it; lastWanted = w; scan() } }
         Chips.update(service)
     }
 
     // ---- where the status bar is -------------------------------------------------------------
 
     private fun scan() = check(full = true)
+
+    /**
+     * The one window title BentoBar reads (AGENTS.md, Least privilege), and only so that the screenshot preview doesn't
+     * count as a shade. [BarRules.decide] asks it of a big system window over the bar's free area and nothing else;
+     * the title is compared here, never logged or kept.
+     */
+    private fun isScreenshotPreview(w: AccessibilityWindowInfo) =
+        w.type == AccessibilityWindowInfo.TYPE_SYSTEM && w.title?.contains("Screenshot", ignoreCase = true) == true
 
     /**
      * Where the status bar is and whether to show the strip. A cheap pass reads just the window list;
@@ -394,294 +548,152 @@ class BarController(private val service: AccessibilityService, val displayId: In
         val inset = metrics?.windowInsets?.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars())?.top ?: 0
         val maxH = (if (inset > 0) inset else (48 * density).toInt()) + 4
         val windows = runCatching { if (desk) service.windowsOnAllDisplays.get(displayId).orEmpty() else service.windows }.getOrDefault(emptyList())
-        overlayIds = windows.filter { it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }.map { it.id }.toSet()
-        val barWindow = if (desk) StatusBarScan.findTaskbar(windows, screenW, screenH, (TASKBAR_MAX_DP * density).toInt())
-            else StatusBarScan.findWindow(windows, screenW, maxH)
-        val barBounds = barWindow?.let { Rect().also { r -> it.getBoundsInScreen(r) } }
-        if (desk && barWindow?.id != lastTaskbar) {
-            lastTaskbar = barWindow?.id
-            Log.i(tag, "taskbar ${barBounds?.toShortString() ?: "none"} on ${screenW}x$screenH, ${windows.size} windows")
+        // Plain facts from here on: what kind each window is and where, and nothing of what is in it.
+        val listed = windows.map { StatusBarScan.fact(it) }
+        overlayIds = listed.filter { it.kind == WindowFact.Kind.OVERLAY }.map { it.id }.toSet()
+        val barFact = if (desk) {
+            StatusBarScan.findTaskbar(windows, screenW, screenH, (TASKBAR_MAX_DP * density).toInt())?.let { listed[windows.indexOf(it)] }
+        } else {
+            BarRules.findBar(listed, screenW, maxH)
+        }
+        if (desk && barFact?.id != lastTaskbar) {
+            lastTaskbar = barFact?.id
+            Log.i(tag, "taskbar ${barFact?.box?.toShortString() ?: "none"} on ${screenW}x$screenH, ${windows.size} windows")
         }
         val prev = snap
         // A see-through panel open over everything (a Samsung tablet's edge panel) takes the status bar out of the
         // list, but the bar still shows: the strip stays as it was.
-        val panel = !desk && windows.any { w ->
-            w.type == AccessibilityWindowInfo.TYPE_SYSTEM && Rect().also { w.getBoundsInScreen(it) }.let { r ->
-                StatusBarScan.overhangs(r.left, r.top, r.right, r.bottom, screenW, screenH) }
+        val panel = !desk && listed.any { w ->
+            w.kind == WindowFact.Kind.SYSTEM && StatusBarScan.overhangs(w.box.left, w.box.top, w.box.right, w.box.bottom, screenW, screenH)
         }
         val s = when {
-            barWindow == null -> if (panel) prev else null
-            !full && prev != null && prev.windowId == barWindow.id && prev.bar == barBounds -> prev
+            barFact == null -> if (panel) prev else null
+            BarRules.keepsReading(full, prev, barFact) -> prev
             else -> {
                 lastFullScan = SystemClock.uptimeMillis()
                 // Without content-change events the node cache can go stale: read the status bar fresh.
                 service.clearCache()
-                runCatching { if (desk) StatusBarScan.scanTaskbar(barWindow) else StatusBarScan.scan(barWindow) }.onFailure { Log.w(tag, "scan failed", it) }.getOrNull()
-                    // No node tree (SystemUI mid-change): the whole bar would cover its icons. Keep the last
-                    // reading of this same bar (without its cached node); with none, stay hidden until a scan can read it.
-                    ?.let { if (it.summary != StatusBarScan.NO_TREE) it else prev?.takeIf { p -> p.windowId == it.windowId && p.bar == it.bar }?.copy(spacerNode = null) }
+                val scanned = runCatching {
+                    if (desk) StatusBarScan.scanTaskbar(windows[listed.indexOf(barFact)])
+                    else StatusBarScan.scan(windows[listed.indexOf(barFact)])
+                }
+                    .onFailure { Log.w(tag, "scan failed", it) }.getOrNull()
+                // A reading kept from before has no node (a scan without a tree brought none).
+                spacerNode = scanned?.spacerNode
+                BarRules.settled(scanned?.snapshot, prev)
             }
         }
-        val newWindow = s?.windowId != snap?.windowId
+        if (s == null) spacerNode = null
         snap = s
         val cfg = Store.config.value
-        // On tablets the shade and Quick Settings slide over the status bar; our overlay would sit
-        // on top of them. Only a big system window counts: on the desktop bar the panels open as
-        // popups below the bar, and small system UI near the top shouldn't blink BentoBar away.
-        // The screenshot UI is a big, mostly see-through system window too ("Screenshot preview",
-        // full screen while it animates), but it doesn't cover the bar: hiding for it made the strip
-        // vanish for the seconds the preview shows.
-        val cover = if (s == null) null else windows.firstOrNull { w ->
-            val r = Rect().also { w.getBoundsInScreen(it) }
-            w.type == AccessibilityWindowInfo.TYPE_SYSTEM && w.id != s.windowId && Rect.intersects(r, s.free) &&
-                r.height() >= s.bar.height() * 4 && w.title?.contains("Screenshot", ignoreCase = true) != true &&
-                !StatusBarScan.overhangs(r.left, r.top, r.right, r.bottom, screenW, screenH)
+        val interactive = pm.isInteractive
+        val locked = km.isKeyguardLocked
+        val factsListed = if (desk) listed.filter { it.kind != WindowFact.Kind.APPLICATION } else listed
+        val d = BarRules.decide(BarFacts(factsListed, s, prev, cfg.enabled && wanted(cfg), interactive, locked, neighbours)) {
+            isScreenshotPreview(windows[listed.indexOf(it)]) ||
+                (!desk && StatusBarScan.overhangs(it.box.left, it.box.top, it.box.right, it.box.bottom, screenW, screenH))
         }
-        val covered = cover != null
-        val show = s != null && !covered && cfg.enabled && wanted(cfg) && pm.isInteractive && !km.isKeyguardLocked
-        if (!show) status = when {
-            !pm.isInteractive || km.isKeyguardLocked -> BarStatus.ASLEEP
-            !cfg.enabled || !wanted(cfg) -> BarStatus.HIDDEN_BY_USER
-            s == null -> BarStatus.NO_BAR
-            else -> BarStatus.COVERED
-        }
-        // An app window settled against the bar's lower edge (maximized, or snapped to a side), or a
-        // full-screen one lies under the bar: SystemUI then gives the bar a background of its own, or that
-        // app's light or dark icons, and takes them away when the window leaves, without an event of the
-        // bar's own. Only the windows' ids and bounds are looked at, from the list at hand.
-        val moved = s != null && !desk && neighbours.next(s.bar.bottom, s.bar.width(),
-            windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-                .map { w -> Rect().also { w.getBoundsInScreen(it) }.let { AppWindow(w.id, it.left, it.top, it.right, it.bottom) } })
-            .let { (seen, moved) -> neighbours = seen; moved }
-        if (show) {
+        if (!desk) d.status?.let { BarStatus.current.value = it }
+        neighbours = d.neighbours
+        if (d.show) {
+            showing = true
             place(s!!, screenW)
-            // A new status bar window can look different (see readSoon for the other causes).
-            if (newWindow) readSoon(ColorWatch.Cause.QUICK, 250)
-            else if (moved) { watch.windows(SystemClock.uptimeMillis()); arm() }
+            // A new status bar window can look different (see ColorReader.readSoon for the other causes).
+            if (d.read == BarRules.Read.NEW_BAR_WINDOW) colors.readSoon(ColorWatch.Cause.QUICK, 250)
+            else if (d.read == BarRules.Read.WINDOWS_MOVED) colors.windowsMoved()
         } else {
-            if (strip.shown) Log.i(tag, "bar hidden (statusBar=${s != null} covered=${cover?.let { "${it.title} " + Rect().also { r -> it.getBoundsInScreen(r) }.toShortString() }} " +
-                "enabled=${cfg.enabled} interactive=${pm.isInteractive} locked=${km.isKeyguardLocked})")
-            closeMenu(now = true)
-            hideTip(now = true)
-            cancelDrag() // the strip's window goes, and with it the release that would end a drag
-            strip.hide()
-            // Readings still to come were for a strip that is gone: its return asks again.
-            watch.clear(); main.removeCallbacks(sample)
-            updateAwake()
-            Ticker.stop(who)
+            if (strips.any { it.shown }) Log.i(tag, "bar hidden (statusBar=${s != null} covered=${d.cover?.box?.toShortString()} " +
+                "enabled=${cfg.enabled} interactive=$interactive locked=$locked)")
+            leaveScreen()
         }
     }
 
     /** adb `debug trace on|off`: logs every move and resize with its cause, to chase jitter. */
     private var tracing = false
-    private var lastPlace = ""
+    private var lastWhere = ""
+    /** What the strip was last placed by: a new width is placed by the same. */
+    private var lastPlace: Pair<BarSnapshot, Int>? = null
     private fun trace(what: String) { if (tracing) Log.i(tag, "trace ${SystemClock.uptimeMillis() % 100_000} $what") }
 
     private fun place(s: BarSnapshot, screenW: Int) {
-        val cfg = Store.config.value
+        lastPlace = s to screenW
+        val cfg = if (desk) Store.config.value.asRightArea() else Store.config.value
         val gap = (6 * density).toInt()
-        val p = strip.params
-        p.height = s.bar.height()
-        p.y = s.bar.top
         // Without a pill the strip's ends are only room for the highlight's round ends: the window reaches that much
         // further out, into the gap, so the items stay 6 dp from the free area's edges as they always were.
         val ends = (STRIP_PILL_PADDING.value * density).toInt()
-        val out = if (cfg.pill == Pill.NONE) ends else 0
-        when (position(cfg)) {
-            Position.RIGHT -> { p.gravity = Gravity.TOP or Gravity.RIGHT; p.x = screenW - s.free.right + gap - out }
-            Position.LEFT -> { p.gravity = Gravity.TOP or Gravity.LEFT; p.x = s.free.left + gap - out }
-            Position.CENTER -> { p.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; p.x = s.free.centerX() - screenW / 2 }
-        }
-        // The whole strip fits the free area: items, the pill's own padding and (decided by the strip,
-        // from what fits) room for ‹.
-        val pillPad = if (cfg.pill == Pill.NONE) 0 else 2 * ends
-        maxWidth.intValue = (s.free.width() - 2 * gap - pillPad).coerceAtLeast(0)
+        // Which strips there are, where and how wide is one rule's answer, carried out here: a window for each area in
+        // use that has room. Each fits its part of the free area: items, the pill's own padding and (decided by the
+        // strip, from what fits) room for ‹.
+        val a = BarRules.arrange(s.free.left, s.free.right, screenW, gap, out = if (cfg.pill == Pill.NONE) ends else 0, ends = ends,
+            between = gap, least = (30 * density).toInt() + 2 * ends, home = cfg.homeArea(), inUse = cfg.areasInUse(),
+            strips = strips.associate { it.area to it.state() })
+        firstBudget.intValue = a.spots.first().budget
         heightDp.value = (s.bar.height() / density).dp
-        val where = "free=${s.free.toShortString()} x=${p.x} maxW=${maxWidth.intValue} [${s.summary}]"
-        if (where != lastPlace) { trace("place $where"); lastPlace = where }
-        status = if (maxWidth.intValue == 0) BarStatus.NO_ROOM else BarStatus.SHOWN
-        if (!strip.shown) {
-            stripEmpty = false // a new window starts visible; its first measure says whether it has content
-            strip.show { StripHost() }
-            // Android refused the window (the service is going): nothing is on screen, so nothing may run or go online.
-            // The next look at the bar tries again.
-            if (!strip.shown) { status = BarStatus.STOPPED; return }
-            updateAwake()
+        val where = "free=${s.free.toShortString()} ${a.spots.joinToString(" ") { "${word(it.area)} x=${it.x} maxW=${it.budget}" }} [${s.summary}]"
+        if (where != lastWhere) { trace("place $where"); lastWhere = where }
+        val was = stripEmpty
+        // Which strip is the first and which areas are owed only name areas, and are said before any window goes or comes:
+        // a window that is added has the watch for presses outside the bar in its params already, as the one strip's had.
+        val before = carrier
+        carrier = a.carrier
+        // Hidden items are out and the first strip is another now: that one hears a press outside the bar.
+        if (carrier != before) watchOutside()
+        owed.value = a.owed
+        val held = awakeWindow()
+        placedAreas = a.spots.map { it.area }
+        // The window that keeps the screen on is about to go: the flag is on the next one first, or the wake lock holds.
+        if (held != null && strips.any { it.window === held && it.area in a.leave }) awake.update()
+        for (strip in strips) if (strip.area in a.leave) leave(strip)
+        // A strip keeps what it had no room for while the bar is off the screen. An area that went out of use or lost its
+        // room meanwhile has no window to say otherwise: nothing of it is left to publish.
+        val stale = strips.filter { s -> s.dropped.isNotEmpty() && a.spots.none { it.area == s.area } }
+        if (stale.isNotEmpty()) { for (strip in stale) strip.dropped = emptySet(); publishOverflow() }
+        // A strip that gets wider, or comes, takes its room after the others have moved or narrowed: asked for the other way
+        // round, it stood for a frame or two in room its neighbour had not left yet.
+        for (spot in BarRules.givingWayFirst(a.spots, strips.filter { it.shown }.associate { it.area to it.params.width })) {
+            val strip = strips.first { it.area == spot.area }
+            val p = strip.params
+            p.height = s.bar.height()
+            p.y = s.bar.top
+            p.gravity = Gravity.TOP or when (spot.area) { Position.RIGHT -> Gravity.RIGHT; Position.LEFT -> Gravity.LEFT; Position.CENTER -> Gravity.CENTER_HORIZONTAL }
+            p.x = spot.x
+            // Exactly as wide as its content last measured (never WRAP_CONTENT), set with where it stands: one move.
+            if (p.width != spot.width) { trace("${word(spot.area)} width ${p.width} -> ${spot.width}"); p.width = spot.width }
+            strip.maxWidth.intValue = spot.budget
+            if (!strip.shown) strip.show { StripHost(strip) } else strip.relayout()
+        }
+        // Android refused an area's window while the others have theirs: the status says so, and the next placing tries again.
+        refused = a.spots.any { spot -> strips.none { it.area == spot.area && it.shown } }
+        // Strips came and went: whether the bar draws anything is asked again. A new window counts as drawing until its
+        // first measure says whether it has content.
+        stripEmpty = strips.none { it.draws }
+        if (!desk) BarStatus.current.value = status()
+        // The strips that were up have left and Android refused the ones in their place: the bar is off the screen.
+        if (!a.first && strips.none { it.shown }) leaveScreen()
+        // Android refused the window (the service is going): nothing is on screen, so nothing may run or go online.
+        // The next look at the bar tries again.
+        if (strips.none { it.shown }) { if (!desk) BarStatus.current.value = BarStatus.STOPPED; return }
+        // Once for each placing, after every window it shows or moves is up: which strip is visible may have changed with
+        // it, or with the measure that asked for it.
+        awake.update()
+        if (a.first) {
             // Back on screen (after a full-screen app, the lock screen, a covering panel): the bar may
             // look different now, or only in a while (after an unlock it kept the lock screen's look for
             // seconds), and a reading owed while hidden is taken here.
-            readSoon(ColorWatch.Cause.SLOW, 250)
-            Ticker.start(who)
+            colors.readSoon(ColorWatch.Cause.SLOW, 250)
+            if (desk) Ticker.start(who) else Ticker.start("bar")
             Log.i(tag, "bar shown: bar=${s.bar.toShortString()} free=${s.free.toShortString()} [${s.summary}]")
-        } else strip.relayout()
-    }
-
-    // ---- colour ------------------------------------------------------------------------------
-
-    /**
-     * Asks for colour readings after something that can change the bar's look. A reading is a
-     * screenshot of SystemUI's status bar WINDOW only (its own surface, no app content), read at the
-     * clock ([BarPixels]). On some devices that surface is glyphs on transparent; on others it's opaque
-     * while an app is maximized (white glyphs on black) and see-through over the wallpaper otherwise.
-     *
-     * The bar gives no sign when it changes, and it changes late, so one cause is followed by a few
-     * readings spread over the time the bar may take ([ColorWatch]): two within a second and a half
-     * after a change of windows or of the wallpaper, six over ten seconds when the strip comes back on
-     * screen or the theme or the display changed. Causes that keep coming are held to a budget there.
-     *
-     * Readings are taken only while the strip is on screen; a cause while it's hidden waits until the
-     * strip shows ([place] asks then). The causes are the moments the bar can change: a new status bar
-     * window, the strip coming back on screen, a window settling against the bar's lower edge or under
-     * it, or leaving ([check]), a theme, display or wallpaper change, and switching back to "Match the
-     * status bar". Never on a timer: an accessibility service taking screenshots every 30 s looks like
-     * screen capture to Android's threat detection.
-     */
-    private fun readSoon(cause: ColorWatch.Cause, firstMs: Long) {
-        if (!started || !strip.shown) return
-        // Not while the strip has nothing to draw: the reading waits until it has ([ColorWatch.pause]).
-        if (stripEmpty) return watch.owe(cause)
-        watch.cause(cause, SystemClock.uptimeMillis(), firstMs)
-        arm()
-    }
-
-    /** Times the next reading [watch] has to come, if any. */
-    private fun arm() {
-        main.removeCallbacks(sample)
-        watch.due(SystemClock.uptimeMillis())?.let { main.postDelayed(sample, it) }
-    }
-
-    private val watch = ColorWatch()
-
-    /** A reading; [check] when it is "Keep checking the status bar"'s, not one a cause asked for. */
-    private fun sampleColor(check: Boolean = false) {
-        if (!started || !strip.shown || !pm.isInteractive) return watch.clear()
-        if (stripEmpty) return watch.pause()
-        val s = snap
-        if (s == null || !Store.config.value.color.reads) { watch.clear(); return applyLook() }
-        watch.taken(SystemClock.uptimeMillis(), check)
-        service.takeScreenshotOfWindow(s.windowId, callbacks, object : AccessibilityService.TakeScreenshotCallback {
-            override fun onSuccess(r: AccessibilityService.ScreenshotResult) {
-                val c = runCatching { barColors(r, s) }.getOrNull()
-                // A result can arrive after stop(): it mustn't paint a strip that's gone.
-                main.post { if (started) onSample(c, check) }
-            }
-            override fun onFailure(code: Int) {
-                main.post { if (started) { if (!check) Log.i(tag, "status bar colour sample failed ($code)"); onSample(null, check) } }
-            }
-        })
-    }
-
-    /**
-     * "Keep checking the status bar": the bar changes its colours with no event (an app turning its page dark, a
-     * system that tints the bar its own way), so while the strip shows and reads the bar, it is read on a timer
-     * whenever no series a cause asked for is under way: every second for a while after anything moved, every four
-     * seconds once all is still ([ColorWatch.checkEvery]).
-     */
-    private val keepChecking = object : Runnable {
-        override fun run() {
-            nextCheck = Long.MAX_VALUE
-            if (!checking()) return
-            val now = SystemClock.uptimeMillis()
-            if (strip.shown && !stripEmpty && pm.isInteractive && watch.idle(now)) sampleColor(check = true)
-            val next = ColorWatch.checkEvery(now - stirred)
-            main.postDelayed(this, next); nextCheck = now + next
+        } else if (stripEmpty != was) {
+            // An area came or went and with it the last thing drawn, or the first: no reading of its own, only what an
+            // empty bar owes or is owed.
+            trace("strip ${if (stripEmpty) "empty" else "has content"}")
+            colors.contentChanged(stripEmpty)
         }
     }
 
-    /** When something last moved that can change the bar's look. */
-    private var stirred = 0L
-
-    private fun checking() = Store.config.value.let { started && it.keepChecking && it.color.reads }
-
-    /** Something moved: quick checks for a while, the next one [firstMs] from now unless one is due sooner. */
-    private fun stir(firstMs: Long) {
-        val now = SystemClock.uptimeMillis()
-        stirred = now
-        if (!checking() || now + firstMs >= nextCheck) return
-        main.removeCallbacks(keepChecking)
-        main.postDelayed(keepChecking, firstMs); nextCheck = now + firstMs
-    }
-    private var nextCheck = Long.MAX_VALUE
-
-    /** Starts or stops [keepChecking] as the settings say. */
-    private fun armChecks() {
-        main.removeCallbacks(keepChecking); nextCheck = Long.MAX_VALUE
-        if (checking()) stir(ColorWatch.CHECK_FAST_MS)
-    }
-
-    /**
-     * A reading, or null for none (the screenshot failed, or the bar was caught fading and had nothing
-     * opaque to read). No reading keeps the colours the strip has; after three in a row the strip uses
-     * the theme and wallpaper hints rather than a reading of how the bar looked before. [watch] says
-     * whether another reading follows.
-     */
-    private fun onSample(c: BarColors?, check: Boolean = false) {
-        val result = ColorWatch.result(sampled, c)
-        if (result == ColorWatch.Result.CHANGED) { sampled = c; applyLook(); stirred = SystemClock.uptimeMillis() }
-        // The strip left the screen while the screenshot was on its way: its return asks again.
-        if (!strip.shown) return
-        // A check that saw the same, or nothing (the next check comes anyway, and three of them mustn't make the
-        // strip guess from the wallpaper): nothing to do or log. A change is followed up as any reading's is.
-        if (check && result != ColorWatch.Result.CHANGED) return
-        if (watch.read(SystemClock.uptimeMillis(), result)) {
-            // With checks running, a bar read well before keeps its colours: a guess from the theme and the wallpaper was
-            // the wrong colour as often as not, and the next check that reads something puts the strip right anyway.
-            if (Store.config.value.keepChecking && sampled != null) Log.i(tag, "no status bar colour reading, keeping the last one")
-            else { Log.i(tag, "no status bar colour reading, using theme and wallpaper hints"); sampled = null; applyLook() }
-        }
-        arm()
-        // Every reading is logged: a strip in the wrong colour can then be traced in a device's log.
-        Log.i(tag, "read${if (check) " (check)" else ""} ${c?.let { "text=${it.text?.let(::hex)} bg=${it.background?.let(::hex)}" } ?: "nothing"} (${result.name.lowercase()}), " +
-            (watch.due(SystemClock.uptimeMillis())?.let { "next in $it ms" } ?: "no more"))
-    }
-
-    /** The pixels around the clock (the whole bar when no clock was found), as [BarPixels] reads them. */
-    private fun barColors(r: AccessibilityService.ScreenshotResult, s: BarSnapshot): BarColors? {
-        val hb = r.hardwareBuffer
-        val bmp = try {
-            Bitmap.wrapHardwareBuffer(hb, r.colorSpace)?.let { wrapped -> wrapped.copy(Bitmap.Config.ARGB_8888, false).also { wrapped.recycle() } }
-        } finally { hb.close() }
-        bmp ?: return null
-        try {
-            val area = Rect(s.clock ?: s.bar).apply { offset(-s.bar.left, -s.bar.top) }
-            // A clock box outside the picture (the bar changed size since the scan): read all of it.
-            if (!area.intersect(0, 0, bmp.width, bmp.height)) area.set(0, 0, bmp.width, bmp.height)
-            val px = IntArray(area.width() * area.height())
-            bmp.getPixels(px, 0, area.width(), area.left, area.top, area.width(), area.height())
-            return BarPixels.colors(px, area.width()) ?: null.also {
-                // Why a reading gave nothing: how much of the clock box is clear, translucent and opaque.
-                val a = px.map { it ushr 24 }
-                Log.i(tag, "nothing to read: ${px.size} px, clear ${a.count { it < 16 }}, translucent ${a.count { it in 16..229 }}, " +
-                    "opaque ${a.count { it >= 230 }}, max alpha ${a.maxOrNull()}")
-            }
-        } finally { bmp.recycle() }
-    }
-
-    /** No sample: a dark system theme means a dark bar on Googlebooks; otherwise the wallpaper decides. */
-    private fun fallbackText(): Color {
-        val night = (service.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        if (night) return Color.White
-        val hints = runCatching { WallpaperManager.getInstance(service).getWallpaperColors(WallpaperManager.FLAG_SYSTEM)?.colorHints }.getOrNull() ?: 0
-        return if (hints and android.app.WallpaperColors.HINT_SUPPORTS_DARK_TEXT != 0) Contrast.DARK_TEXT else Color.White
-    }
-
-    private fun applyLook() {
-        val cfg = Store.config.value
-        val bg = if (cfg.color.reads) sampled?.background else null
-        val text = when (cfg.color) {
-            ColorMode.LIGHT -> Color.White
-            ColorMode.DARK -> Contrast.DARK_TEXT
-            ColorMode.AUTO, ColorMode.OPPOSITE -> sampled?.text ?: bg?.let { Contrast.readableOn(it) } ?: fallbackText()
-        }
-        val matched = Contrast.resolve(text, bg)
-        val live = if (cfg.color == ColorMode.OPPOSITE) Contrast.opposite(matched) else matched
-        if (!desk) BarLook.current.value = live
-        look.value = StripLook(live.fg, live.barDark, cfg.textSize, cfg.spacing.dp, cfg.pill, live.background)
-        Log.i(tag, "look ${cfg.color.name.lowercase()} fg=${hex(live.fg)} bg=${bg?.let { hex(it) } ?: "transparent"} dark=${live.barDark} " +
-            "contrast=${"%.1f".format(java.util.Locale.ROOT, Contrast.ratio(live.fg, live.background))}")
-    }
-
-    private fun hex(c: Color) = "#%06X".format(java.util.Locale.ROOT, c.toArgb() and 0xFFFFFF)
+    /** An area as the user's word for it, for the trace and the dump. */
+    private fun word(area: Position) = when (area) { Position.RIGHT -> "right"; Position.LEFT -> "left"; Position.CENTER -> "middle" }
 
     // ---- the strip ---------------------------------------------------------------------------
 
@@ -691,79 +703,112 @@ class BarController(private val service: AccessibilityService, val displayId: In
     }
 
     @Composable
-    private fun StripHost() {
-        val cfg by Store.config.collectAsState()
+    private fun StripHost(strip: AreaStrip) {
+        val storedCfg by Store.config.collectAsState()
+        val rawCfg = if (desk) storedCfg.asRightArea() else storedCfg
         val states by Ticker.states.collectAsState()
         // Items another app shows itself (items/Claims) are left out here, while that app holds them. That app draws on
         // the device's own screen only, so an external display keeps its whole strip.
         val held by com.meridian11.books.bentobar.items.Claims.claim.collectAsState()
         val claim = if (desk) com.meridian11.books.bentobar.items.ClaimRules.Claim() else held
         val entries = { list: List<ItemConfig> -> list.map { StripEntry(it, states[it.id] ?: Ticker.placeholder(it)) } }
-        // Presenting (screen sharing): only what matters on stage, whatever its section.
         // While dragging, the bar shows the order the item would land in.
-        val items = (dragPreview.value?.let { (id, at) -> cfg.items.moved(id, Section.SHOWN, at) } ?: cfg.items)
+        val items = (dragPreview.value?.let { (id, at) -> rawCfg.items.moved(id, Section.SHOWN, at) } ?: rawCfg.items)
             .filter { com.meridian11.books.bentobar.items.ClaimRules.inStrip(it.id, claim) }
-        val visible = (if (cfg.presenting) items.filter { it.section != Section.OFF && it.type in PRESENTING_TYPES && states[it.id]?.active == true }
-        else items.filter { cfg.shows(it, states[it.id]?.active == true) })
-            // Next meeting stays at the far left: its text changes width most, and there it moves nothing else.
-            .sortedBy { if (it.type == Store.PINNED_LEFT) 0 else 1 }
-        // Behind ‹ (click or hover modes): hidden items not out on their own. Show everything: none.
-        val hidden = if (cfg.presenting) emptyList() else cfg.behindChevron { states[it.id]?.active == true }
-            .filter { com.meridian11.books.bentobar.items.ClaimRules.inStrip(it.id, claim) }
-        val overflow by this.overflow.collectAsState()
-        // Without the ‹ button there's no way to fold hidden items back, so they stay folded.
-        val open = expanded.value && cfg.hiddenMode != HiddenMode.SHOW_ALL && !cfg.presenting
-        MeasuredStrip(bias = when (position(cfg)) { Position.RIGHT -> 1f; Position.CENTER -> 0f; Position.LEFT -> -1f },
-            onWidth = { w -> if (w != strip.params.width || (w <= 0) != stripEmpty) main.post { applyWidth(w) } }) {
-            // Another app shows the bar's items itself (items/Claims): nothing at all, so the strip measures empty
-            // and its window shows nothing, not even its pill. Sampling goes on, as for any empty strip.
+        val cfg = rawCfg.copy(items = items)
+        val active = { item: ItemConfig -> states[item.id]?.active == true }
+        // An area with no room has no window, and what it would draw now must not be out of reach: it is owed to the first
+        // strip. Decided here, so a rule that starts to hold in such an area is heard at once; told once it is applied.
+        val owes = if (strip.area == carrier) cfg.owedIds(owed.value, active, expanded.value) else emptySet()
+        SideEffect { if (strip.area == carrier) owe(owes) }
+        // Its own area's items, and a ‹ for what it has no room for itself: a placed strip's lack of room is not another's
+        // business. The first strip's ‹ is also there for what is owed, for what waits behind the ‹ of an area with no window,
+        // and for presenting's ‹ when the home area has no window.
+        val plan = cfg.stripPlan(strip.area, active, expanded.value,
+            strip.dropped.isNotEmpty() || (strip.area == carrier && cfg.carrierOverflow(owed.value, owes, active)))
+        val shownEntries = entries(plan.visible)
+        val revealedEntries = entries(plan.revealed)
+        // The one rule for an empty strip: what it puts on the screen, never how many entries it has.
+        // The empty capsule shows once: in the home area, or the first strip's while the home area has no window, and not
+        // beside another area's items.
+        val drawn = !claim.whole && StripContent.drawn(shownEntries + revealedEntries, plan.chevron, look.value.pill,
+            home = strip.area == StripContent.capsuleArea(cfg.homeArea(), carrier, owed.value) && (onView.value - strip.area).isEmpty())
+        // While the window is invisible nothing draws, and the remeasure Compose hands to the next draw would wait for it for
+        // good. Measuring still runs, if it is asked for: the rule above is heard as soon as the composition changes.
+        val view = LocalView.current
+        SideEffect { if (strip.empty) view.requestLayout() }
+        // Its reach is known when its items are laid out, before its width is. It is read as state where the width is
+        // reported, so a fit that changed under an unchanged width (an item gone, a ‹ come) is still heard.
+        val reach = remember { mutableIntStateOf(0) }
+        MeasuredStrip(bias = when (strip.area) { Position.RIGHT -> 1f; Position.CENTER -> 0f; Position.LEFT -> -1f },
+            onWidth = { w ->
+                val empty = StripContent.empty(w, drawn)
+                val r = reach.intValue
+                val window = strip.generation
+                if (w != strip.measured || empty != strip.empty || strip.pending || r != strip.reach) main.post { applyWidth(strip, window, w, empty, r) }
+            }) {
             if (claim.whole) androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier) else Strip(
-                visible = entries(visible),
-                revealed = if (open) entries(hidden) else emptyList(),
-                // Items that don't fit are offered in the ‹ menu, so ‹ shows for them too.
-                showChevron = cfg.presenting || overflow.isNotEmpty() || hidden.isNotEmpty(),
-                chevronAlways = cfg.presenting || hidden.isNotEmpty(),
+                visible = shownEntries,
+                revealed = revealedEntries,
+                showChevron = plan.chevron,
+                // The first strip's ‹ also comes and goes for the areas with no room. With several areas in use it keeps
+                // a ‹'s room whatever it draws, so that what it keeps, and with it the room behind it, never follows that ‹.
+                chevronAlways = plan.chevronAlways || (!desk && strip.area == carrier && cfg.areasInUse().size > 1),
                 chevronReservePx = (30 * density).toInt(),
-                expanded = open,
-                chevronOnLeft = position(cfg) != Position.LEFT,
+                expanded = plan.open,
+                chevronOnLeft = strip.area != Position.LEFT,
                 look = look.value,
-                maxWidthPx = maxWidth.intValue,
+                maxWidthPx = strip.maxWidth.intValue,
                 heightDp = heightDp.value,
-                events = events,
-                onOverflow = { ids -> main.post { if (this@BarController.overflow.value != ids) { this@BarController.overflow.value = ids; main.post(scanNow) } } },
-                // The item a popup belongs to: "item:<id>" and "ctx:<id>" (its right-click menu) are the item's, "bentobar" is ‹'s.
-                open = menuKey?.let { if (it == "bentobar") "chevron" else it.substringAfter(':', "").ifEmpty { null } },
+                events = events.getValue(strip),
+                onOverflow = { ids ->
+                    val window = strip.generation
+                    main.post { if (strip.shown && window == strip.generation) { strip.dropped = ids; publishOverflow() } }
+                },
+                // The item a popup belongs to: an item's popup and its right-click menu are the item's, the ‹ menu is ‹'s.
+                open = menus.menuKey?.owner?.ifEmpty { null }.takeIf { menus.menuStrip === strip },
+                onReach = { reach.intValue = it },
             )
         }
     }
 
-    /** Sizes the strip window to its content (an exact width, never WRAP_CONTENT). */
     /**
-     * Nothing to draw (every item off, or only rule items that don't apply now): the strip's window
-     * is made invisible rather than left up empty and a pixel wide, which is what Android's threat
-     * detection looks for ("imperceptible content" from an accessibility service). Its content keeps
-     * being measured, so it shows again as soon as there's something to draw.
+     * No strip draws anything ([AreaStrip.draws]: a strip shown and not measured yet counts as drawing, until its first
+     * measure says). A strip with nothing to draw ([StripContent.empty]: every item off, only rule items that don't apply
+     * now, only blank items) has its window made invisible rather than left up empty, which is what Android's threat
+     * detection looks for ("imperceptible content" from an accessibility service). Its content keeps being measured, so
+     * it shows again as soon as there's something to draw ([StripHost] asks for that measure). Keep awake and the colours
+     * are told when this changes.
      */
     private var stripEmpty = false
+    /** An area with a place has no window: Android refused it at the last placing. */
+    private var refused = false
 
-    private fun applyWidth(w: Int) {
-        val empty = w <= 0
-        if (empty != stripEmpty) {
-            stripEmpty = empty; strip.setContentVisible(!empty); trace("strip ${if (empty) "empty" else "has content"}"); updateAwake()
-            // Nothing to draw: no readings; something again: the readings owed meanwhile, or two quick ones.
-            if (started && strip.shown) {
-                if (empty) watch.pause() else watch.resume(SystemClock.uptimeMillis(), 250)
-                arm()
-            }
+    private fun status() = StripContent.status(refused, empty = strips.any { it.shown } && stripEmpty, noRoom = firstBudget.intValue == 0)
+
+    /**
+     * A strip measured its content: what it measured is kept on the strip, and the bar is placed again by it. [window] is
+     * the strip's [AreaStrip.generation] when it was measured.
+     */
+    private fun applyWidth(strip: AreaStrip, window: Int, w: Int, empty: Boolean, reach: Int) {
+        if (!strip.shown || window != strip.generation) return // it left meanwhile, or left and came back: another window's measure
+        val was = stripEmpty
+        strip.measured = w; strip.empty = empty; strip.reach = reach; strip.pending = false
+        strip.setContentVisible(!empty) // the one place a strip's window becomes visible, or invisible again
+        noteOnView()
+        stripEmpty = strips.none { it.draws }
+        if (stripEmpty != was) {
+            trace("strip ${if (stripEmpty) "empty" else "has content"}")
+            colors.contentChanged(stripEmpty)
         }
-        val width = w.coerceAtLeast(1)
-        if (strip.params.width == width) return
-        trace("width ${strip.params.width} -> $width")
-        strip.params.width = width
-        strip.relayout()
+        // Placed again first, then keep awake is told once, by the placing: told before, it would choose by the placing
+        // that is about to change, and take a wake lock and let it go within one measure.
+        val placing = if (showing) lastPlace else null // never puts back a bar that has left
+        if (placing != null) place(placing.first, placing.second) else awake.update()
+        if (started && strips.any { it.shown } && !desk) BarStatus.current.value = status()
     }
 
-    private var dragFrom: Pair<String, Rect>? = null
+    private var dragFrom: Drag? = null
     private var dragCenters: Map<String, Float> = emptyMap()
     /** While an item is dragged: its id and the index it would land at, for the strip's live order. */
     private val dragPreview = mutableStateOf<Pair<String, Int>?>(null)
@@ -771,46 +816,59 @@ class BarController(private val service: AccessibilityService, val displayId: In
     /** Ends a drag without moving anything: the order drawn is the saved one again. */
     private fun cancelDrag() { dragPreview.value = null; dragFrom = null; dragCenters = emptyMap() }
 
-    private val events = object : StripEvents {
+    /**
+     * The one drag: its item, where that stood when the drag began, and the strip it is in. [from] and the others' centres
+     * are places in that strip's window, so a drag is never carried on from another strip.
+     */
+    private class Drag(val id: String, val from: Rect, val strip: AreaStrip)
+
+    /** What the pointer does on one strip: the same for each, but for the window its popups hang from and where its items stand. */
+    private inner class AreaEvents(val strip: AreaStrip) : StripEvents {
+        private val placed = strip.placed
+
         override fun placed(id: String, at: Rect) { placed[id] = at }
+
+        override fun gone(id: String) { placed -= id }
 
         override fun click(item: ItemConfig, at: Rect) {
             placed[item.id] = at
             // A click ends the hover's tooltip, whatever it does next (a screenshot must not catch it).
-            hideTip(now = true)
+            menus.hideTip(now = true)
             val type = Items.of(item.type) ?: return
-            if (type.onClick(item)) { Ticker.refresh(); return }
+            val clicked = Ticker.guarded(type, "onClick") { type.onClick(item) } ?: return
+            if (clicked) { Ticker.refresh(); return }
             if (type.menu == null) return
-            toggleMenu("item:${item.id}", at, type.menuWidthDp) { host -> ItemMenu(item.id, host) }
+            menus.toggleMenu(strip, MenuKey.Item(item.id), at, type.menuWidthDp) { host -> ItemMenu(item.id, host) }
         }
 
         override fun context(item: ItemConfig, at: Rect) {
             placed[item.id] = at
-            toggleMenu("ctx:${item.id}", at, 280) { host ->
+            menus.toggleMenu(strip, MenuKey.ItemContext(item.id), at, 280) { host ->
                 ItemContextMenu(item.id, host) {
                     val type = Items.of(item.type)
-                    if (type?.menu != null) { closeMenu(dissolve = true); toggleMenu("item:${item.id}", at, type.menuWidthDp) { h -> ItemMenu(item.id, h) } }
+                    if (type?.menu != null) { menus.closeMenu(dissolve = true); menus.toggleMenu(strip, MenuKey.Item(item.id), at, type.menuWidthDp) { h -> ItemMenu(item.id, h) } }
                 }
             }
         }
 
         override fun scroll(item: ItemConfig, steps: Int) {
-            Items.of(item.type)?.onScroll(item, steps)
+            Items.of(item.type)?.let { t -> Ticker.guarded(t, "onScroll") { t.onScroll(item, steps) } }
             Ticker.refresh()
         }
 
         /** The slider in the bar: the item sets what it stands for, and only that item is drawn again (no sampler runs for a drag). */
         override fun slide(item: ItemConfig, level: Float, done: Boolean) {
             sliding = !done
-            hideTip()
-            Items.of(item.type)?.onSlide(item, level, done)
+            menus.hideTip()
+            Items.of(item.type)?.let { t -> Ticker.guarded(t, "onSlide") { t.onSlide(item, level, done) } }
             Ticker.refresh(item)
         }
 
         override fun chevron(at: Rect) {
             // While presenting, or with nothing behind it (show everything, or ‹ only for items that
-            // don't fit), ‹ opens the menu.
-            Store.config.value.let { if (it.presenting || it.hiddenMode == HiddenMode.SHOW_ALL || (!expanded.value && hiddenItems().isEmpty())) return chevronContext(at) }
+            // don't fit, in this area or owed to it), ‹ opens the menu.
+            val hidden = hiddenItems()
+            Store.config.value.let { if (chevronOpensMenu(it.presenting, it.hiddenMode, expanded.value, hidden.isNotEmpty(), hidden.any { h -> h.area == strip.area })) return chevronContext(at) }
             val next = !expanded.value
             expanded.value = next
             pinned = next
@@ -820,7 +878,7 @@ class BarController(private val service: AccessibilityService, val displayId: In
             if (next && secs > 0) main.postDelayed(collapse, secs * 1000L)
         }
 
-        override fun chevronContext(at: Rect) = barMenu(at, everything = false)
+        override fun chevronContext(at: Rect) = menus.barMenu(strip, at, everything = false)
 
         /**
          * A drag in the bar. While it moves, the strip previews the new order ([dragPreview]), so
@@ -830,22 +888,20 @@ class BarController(private val service: AccessibilityService, val displayId: In
          * ones out on their own or revealed from ‹ keep their section.
          */
         override fun drag(item: ItemConfig, dx: Float, done: Boolean) {
-            hideTip()
-            if (dragFrom?.first != item.id) {
+            menus.hideTip()
+            if (dragFrom?.id != item.id || dragFrom?.strip !== strip) {
                 val r = placed[item.id]
-                dragFrom = r?.let { item.id to Rect(it) }
+                dragFrom = r?.let { Drag(item.id, Rect(it), strip) }
                 dragCenters = placed.filterKeys { it != item.id }.mapValues { it.value.exactCenterX() }
             }
-            val from = dragFrom?.second
+            val from = dragFrom?.from
             val cfg = Store.config.value
-            val index = if (item.section != Section.SHOWN || from == null) null else {
-                val center = from.exactCenterX() + dx
-                val overflow = this@BarController.overflow.value
-                val others = cfg.items.filter { it.section == Section.SHOWN && it.id != item.id }
-                val drawn = others.filter { it.id !in overflow && dragCenters.containsKey(it.id) }
-                val after = drawn.firstOrNull { dragCenters.getValue(it.id) > center }
-                if (after == null) others.size else others.indexOfFirst { it.id == after.id }
-            }
+            // It lands among its own area's items; with every item in one area those are all the others, as they always were.
+            val others = cfg.items.filter { it.section == Section.SHOWN && it.id != item.id }
+            val index = if (item.section != Section.SHOWN || from == null) null
+                else StripDrag.index(from.exactCenterX() + dx, others.map { it.id }, overflow.value, dragCenters,
+                    mine = others.filter { desk || it.area == item.area }.map { it.id }.toSet(),
+                    now = cfg.items.takeWhile { it.id != item.id }.count { it.section == Section.SHOWN })
             if (!done) {
                 if (index != null && dragPreview.value != (item.id to index)) dragPreview.value = item.id to index
                 return
@@ -854,6 +910,8 @@ class BarController(private val service: AccessibilityService, val displayId: In
             if (index != null) Store.move(item.id, Section.SHOWN, index)
             cancelDrag()
         }
+
+        override fun dragTakenAway(item: ItemConfig) { if (dragFrom?.id == item.id && dragFrom?.strip === strip) cancelDrag() }
 
         override fun gapClick(key: String) {
             val at = placed[key] ?: return
@@ -864,46 +922,26 @@ class BarController(private val service: AccessibilityService, val displayId: In
         override fun wheel(up: Boolean) {
             val cfg = Store.config.value
             if (cfg.presenting || cfg.hiddenMode == HiddenMode.SHOW_ALL || hiddenItems().isEmpty()) return
-            if (up != expanded.value) { expanded.value = up; pinned = false }
+            if (up == expanded.value) return
+            if (up) { expanded.value = true; pinned = false } else fold()
         }
 
-        override fun itemHover(item: ItemConfig, at: Rect, inside: Boolean) {
-            main.removeCallbacks(showTip)
-            // "Switch popups on hover": with a popup open, the item pointed at opens its own, as in a menu bar.
-            val type = Items.of(item.type)
-            if (inside && !sliding && type != null &&
-                PopupRules.hoverOpens(menuKey, item.id, hasPopup = type.menu != null, on = Store.config.value.hoverSwitchesPopups)) {
-                placed[item.id] = at
-                toggleMenu("item:${item.id}", at, type.menuWidthDp) { host -> ItemMenu(item.id, host) }
-                return
-            }
-            if (inside && menu == null && !sliding) { tipFor = item to Rect(at); main.postDelayed(showTip, 600) } else hideTip()
-        }
+        override fun itemHover(item: ItemConfig, at: Rect, inside: Boolean) = menus.itemHover(strip, item, at, inside, sliding)
 
         override fun hover(inside: Boolean) {
-            trace("hover $inside")
-            hovering = inside
-            main.removeCallbacks(expandOnHover); main.removeCallbacks(collapse)
-            if (inside) {
-                if (Store.config.value.hiddenMode == HiddenMode.HOVER && !expanded.value && hiddenItems().isNotEmpty()) main.postDelayed(expandOnHover, 350)
-            } else if (!pinned) main.postDelayed(collapse, 900)
-            else {
-                val secs = Store.config.value.autoCollapseSec
-                if (secs > 0) main.postDelayed(collapse, secs * 1000L)
-            }
+            trace("hover $inside ${word(strip.area)}")
+            val (areas, bar) = PopupRules.hoverChanged(hoverAreas, strip.area, inside)
+            hoverAreas = areas
+            // Onto this strip or off it with the pointer over another one as well: to the bar it is where it was. The
+            // tooltip of the strip it left ends all the same; one the other strip is waiting to show is not this one's.
+            if (bar == null && !inside) menus.hideTip(strip)
+            if (bar == null) return
+            if (!inside) menus.hideTip() // the pointer left the bar: even an item that has gone, and can't say so itself
+            barHover(bar)
         }
     }
 
-    private fun barMenu(at: Rect, everything: Boolean) = toggleMenu("bentobar", at, 290) { host ->
-        BentoBarMenu(host, openItem = { item ->
-            val type = Items.of(item.type)
-            closeMenu(dissolve = true)
-            // From the list of every item, an item's menu opens under the item itself.
-            val anchor = placed[item.id]?.takeIf { everything } ?: at
-            if (type != null && type.onClick(item)) Ticker.refresh()
-            else if (type?.menu != null) toggleMenu("item:${item.id}", anchor, type.menuWidthDp) { h -> ItemMenu(item.id, h) }
-        }, hideBar = { Store.update { it.copy(enabled = false) } }, everything = everything, overflowIds = overflow)
-    }
+    private val events = strips.associateWith { AreaEvents(it) }
 
     /**
      * The "BentoBar menu" entry (a keyboard shortcut the user binds in the system's shortcut
@@ -911,291 +949,62 @@ class BarController(private val service: AccessibilityService, val displayId: In
      * False when the strip isn't showing.
      */
     fun openBarMenu(): Boolean {
+        val strip = carrierStrip()
         if (!started || !strip.shown) return false
         // Under the strip's end next to the system icons (its start when the strip is on the left).
         val w = strip.params.width
         val h = strip.params.height
-        val at = if (position(Store.config.value) == Position.LEFT) Rect(0, 0, 1, h) else Rect(w - 1, 0, w, h)
-        barMenu(at, everything = true)
+        val at = if (strip.area == Position.LEFT) Rect(0, 0, 1, h) else Rect(w - 1, 0, w, h)
+        menus.barMenu(strip, at, everything = true)
         return true
     }
 
-    // ---- menus -------------------------------------------------------------------------------
+    /** Dynamic Notch ([com.meridian11.books.bentobar.items.ItemsProvider]): runs [id]'s click or opens its popup at [onScreen]. */
+    fun openAt(id: String, onScreen: Rect, hover: Boolean = false): Boolean =
+        started && menus.openAt(carrierStrip(), id, onScreen, hover)
 
-    private val host = object : MenuHost {
-        override fun close() = closeMenu()
-        override fun openItemSettings(id: String) { closeMenu(); MainActivity.open(service, id.ifEmpty { null }) }
-        // Once the popup is gone from the screen (a screenshot must not show it): a frame after its window is removed.
-        override fun afterClose(action: () -> Unit) { closeMenu(then = { main.postDelayed(action, 50) }) }
-    }
-
-    /**
-     * Another app that shows the bar's items (items/ItemsProvider) asks for what a click on [id] does, with the popup
-     * under [onScreen], a place of its own in screen coordinates: the item's own click, else its popup there (a
-     * second ask closes it, as a second click does). False where there is no such item or it has nothing to open.
-     * [hover]: the pointer rests on the item there: only its popup, which stays if it's already open.
-     */
-    fun openAt(id: String, onScreen: Rect, hover: Boolean = false): Boolean {
-        val item = Store.config.value.items.firstOrNull { it.id == id } ?: return false
-        val type = Items.of(item.type) ?: return false
-        if (hover && (type.menu == null || menuKey == "item:${item.id}")) return type.menu != null
-        hideTip(now = true)
-        if (!hover && type.onClick(item)) { Ticker.refresh(); return true }
-        if (type.menu == null) return false
-        val loc = strip.locationOnScreen()
-        sharedKey = "item:${item.id}"
-        toggleMenu("item:${item.id}", Rect(onScreen).apply { offset(-loc[0], -loc[1]) }, type.menuWidthDp, anywhere = true) { host -> ItemMenu(item.id, host) }
-        return true
-    }
-
-    /** The popup last opened for another app ([openAt]), while it may still be open. */
-    private var sharedKey: String? = null
-
-    /**
-     * That app moved on (its own panel opened, say): the popup it asked for goes. One the user opened from the bar
-     * itself since then stays.
-     */
-    fun closeShared() {
-        val key = sharedKey ?: return
-        sharedKey = null
-        if (menuKey == key) closeMenu()
-    }
-
-    /**
-     * Opens the popup [key] below [anchor] (strip window coordinates), or closes it if it's open. A popup
-     * open for another item dissolves while this one unfolds; one still folding away turns round.
-     */
-    fun toggleMenu(key: String, anchor: Rect, widthDp: Int, anywhere: Boolean = false, content: @Composable (MenuHost) -> Unit) {
-        val now = SystemClock.uptimeMillis()
-        hideTip(now = true)
-        if (menuKey == key) { closeMenu(); return }
-        if (spentKey == key) { spentKey = null; if (now - spentAt < 1000) return }
-        spentKey = null
-        val back = leaving
-        if (menu == null && !leavingThen && leavingKey == key && back != null && back.reopen()) {
-            leaving = null; leavingKey = null
-            menu = back; menuKey = key
-            focusMenu(key)
-            return
-        }
-        closeMenu(dissolve = true) // resets the sampling demand, so the new popup's is set after it
-        val s = snap ?: return
-        val loc = strip.locationOnScreen()
-        val a = Rect(anchor).apply { offset(loc[0], loc[1]) }
-        val bounds = screenBounds()
-        val w = (widthDp * density).toInt()
-        val side = (MenuRoom.side.value * density).toInt()
-        // Lined up with its item, and kept within the strip; or within the screen, for an item another app shows
-        // somewhere of its own ([anywhere], openAt).
-        val x = if (anywhere) PopupRules.popupLeft(a.left, a.right, w, 0, bounds.width(), bounds.width(), side)
-            else PopupRules.popupLeft(a.left, a.right, w, loc[0], loc[0] + strip.params.width, bounds.width(), side)
-        // On a taskbar, the status bar's popup mirrored: its bottom edge as far above the taskbar as a popup's top edge is
-        // below the status bar, and it unfolds up from there.
-        val gap = (MenuRoom.top.value * density).toInt()
-        val y = if (desk) s.bar.top - gap else s.bar.bottom + gap
-        val maxH = ((if (desk) s.bar.top else bounds.height() - s.bar.bottom) / density - 170).toInt().coerceAtLeast(200)
-        val o = MenuWindow(ctx, "BentoBar menu", onOutside = { outside(it) }, onEscape = { closeMenu() })
-        handOff?.let { old -> o.onMove = { if (handOff === old) dissolveHandOff() } }
-        if (!o.show(x, y, w, above = desk, screenHeight = bounds.height(), shadow = { MenuShadow(widthDp.dp, o.glass) }) { MenuSurface(widthDp.dp, maxH.dp, o.glass) { content(host) } }) return
-        menu = o
-        menuKey = key
-        focusMenu(key)
-    }
-
-    /**
-     * A press outside the open popup. On the popup's own item it folds the popup away and that press's click is
-     * spent; on another item the popup dissolves, and the click opens that item's popup as it unfolds; anywhere
-     * else it folds. (A press on another app's window comes without coordinates: it is "anywhere else".)
-     */
-    private fun outside(ev: MotionEvent) {
-        val key = menuKey ?: return
-        val loc = strip.locationOnScreen()
-        val x = ev.rawX - loc[0]
-        val y = ev.rawY - loc[1]
-        val onStrip = (ev.rawX != 0f || ev.rawY != 0f) && strip.shown &&
-            x >= 0 && x < strip.params.width && y >= 0 && y < (snap?.bar?.height() ?: 0)
-        // The same rule as the highlight's: a press in a gap belongs to the item on its side of the gap's middle.
-        val hit = if (onStrip) StripHighlight.target(x, placed.map { (k, r) -> Span(k, r.left.toFloat(), r.right.toFloat()) }.sortedBy { it.left }, null)
-            else null
-        val own = if (key == "bentobar") "chevron" else key.substringAfter(':')
-        when (hit) {
-            null -> closeMenu()
-            own -> { spentKey = key; spentAt = SystemClock.uptimeMillis(); closeMenu() }
-            else -> closeMenu(dissolve = true)
-        }
-    }
-
-    private fun focusMenu(key: String) {
-        Ticker.focusItem = key.removePrefix("item:").takeIf { key.startsWith("item:") }
-        Ticker.revealHidden = expanded.value || key == "bentobar"
-        Ticker.start("menu")
-    }
-
-    // ---- tooltips ----------------------------------------------------------------------------
-
-    private var tip: MenuWindow? = null
-    private var tipFor: Pair<ItemConfig, Rect>? = null
-    private val showTip = Runnable { tipFor?.let { (item, at) -> showTooltip(item, at) } }
-
-    /**
-     * The item's name below it, after a short hover: icon-only items otherwise give a mouse user
-     * nothing to go on. An item whose state has a tooltip of its own (a track's whole title and
-     * artist, which flight this is) shows that instead. A no-touch window, so it never takes a click.
-     */
-    private fun showTooltip(item: ItemConfig, anchor: Rect) {
-        hideTip(now = true)
-        val s = snap ?: return
-        if (menu != null || !strip.shown) return
-        val label = Ticker.states.value[item.id]?.tooltip?.takeIf { it.isNotBlank() } ?: Items.of(item.type)?.title ?: return
-        val loc = strip.locationOnScreen()
-        val a = Rect(anchor).apply { offset(loc[0], loc[1]) }
-        val paint = android.text.TextPaint().apply { textSize = android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, 13f, service.resources.displayMetrics) }
-        // A long tip ends in an ellipsis: the window is never wider than this.
-        // The glass sets the text a little wider than this paint measures it (its letter spacing): room for that.
-        val w = ((paint.measureText(label) * 1.06f + 2 * 10 * density).toInt() + (6 * density).toInt()).coerceAtMost((TOOLTIP_MAX_DP * density).toInt())
-        val bounds = screenBounds()
-        // On the popups' glass, and unfolding as they do (up from a taskbar): a small popup that takes no touch.
-        val o = MenuWindow(ctx, "BentoBar tooltip", onOutside = {}, onEscape = {})
-        val widthDp = (w / density).toInt() + 1
-        val x = (a.centerX() - w / 2).coerceIn(0, (bounds.width() - w).coerceAtLeast(0))
-        val gap = (4 * density).toInt()
-        val y = if (desk) s.bar.top - gap else s.bar.bottom + gap
-        if (!o.show(x, y, (widthDp * density).toInt(), above = desk, screenHeight = bounds.height(), passive = true,
-                shadow = { MenuShadow(widthDp.dp, o.glass) }) { MenuSurface(widthDp.dp, TOOLTIP_HEIGHT, o.glass) { Tooltip(label) } }) return
-        tip = o
-    }
-
-    /** The tooltip goes: it fades where it is, or at once ([now]: a click, a popup opening, a screenshot to come). */
-    private fun hideTip(now: Boolean = false) {
-        main.removeCallbacks(showTip)
-        tip?.close(dissolve = true, now = now); tip = null
-    }
-
-    /**
-     * Closes the open popup: it folds back into its item ([dissolve]: it dissolves in place, left for
-     * another), or goes at once ([now]: the service stopping, the screen going off, the display
-     * changing). [then] runs once it is off the screen.
-     */
-    fun closeMenu(now: Boolean = false, dissolve: Boolean = false, then: (() -> Unit)? = null) {
-        if (now) dropHandOff.run()
-        val o = menu
-        if (o == null) {
-            if (now) { leaving?.close(now = true); leaving = null; leavingKey = null; leavingThen = false }
-            then?.invoke()
-            return
-        }
-        menu = null
-        // An earlier one still leaving goes at once: only one popup is ever folding away.
-        leaving?.close(now = true)
-        if (desk && dissolve && !now && then == null) {
-            // On a taskbar a popup left for another stays as it is, taking no touches, until the new one starts to rise, and
-            // dissolves from then on, as on the status bar: dissolving at once, it was half gone before the new one moved
-            // (that waits for its first frames); going at once, there was a moment with neither, and the popup seemed to bounce.
-            dropHandOff.run()
-            o.stopTouches()
-            handOff = o
-            main.postDelayed(dropHandOff, HANDOFF_MAX_MS)
-        } else {
-            leaving = o; leavingKey = menuKey; leavingThen = then != null
-            o.close(dissolve = dissolve, now = now) {
-                if (leaving === o) { leaving = null; leavingKey = null; leavingThen = false }
-                then?.invoke()
-            }
-        }
-        menuKey = null
-        Ticker.focusItem = null
-        Ticker.revealHidden = expanded.value
-        Ticker.stop("menu")
-        if (!hovering && !pinned) { main.removeCallbacks(collapse); main.postDelayed(collapse, 600) }
-    }
-
-    // ---- keep awake --------------------------------------------------------------------------
-
-    /**
-     * Keep awake holds the screen on through the strip's own window (FLAG_KEEP_SCREEN_ON on a
-     * window that's visible), not a window of its own. It used to be a separate 1×1 see-through
-     * overlay: Play Protect's live threat detection flags an accessibility service that keeps
-     * "imperceptible content" on screen ("App displays over other apps"). The catch: while the strip
-     * is hidden (a full-screen app, the screen locked), keep awake waits; full-screen video players
-     * keep the screen on themselves.
-     */
-    private fun updateAwake() {
-        if (desk) return // the device's own strip keeps the screen on
-        val on = Caffeine.active() || DisplaysItem.keepingAwake.value
-        val f = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        val flags = if (on) strip.params.flags or f else strip.params.flags and f.inv()
-        if (flags != strip.params.flags) {
-            strip.params.flags = flags
-            strip.relayout()
-            Log.i(tag, if (on) "keep awake on" else "keep awake off")
-        }
-        // While the strip is hidden (a full-screen app, BentoBar hidden from its tile) or has nothing
-        // to draw, no visible window of ours carries the flag: a screen wake lock holds it instead,
-        // with no window. Released when the strip is back, keep awake ends, the screen goes off (the
-        // power key or the lid) or the lock screen is up.
-        val lock = on && (!strip.shown || stripEmpty) && pm.isInteractive && !km.isKeyguardLocked
-        if (lock && !screenLock.isHeld) { screenLock.acquire(); Log.i(tag, "keep awake: wake lock while the bar is hidden") }
-        else if (!lock && screenLock.isHeld) screenLock.release()
-    }
-
-    /** See [updateAwake]. Deprecated in favor of FLAG_KEEP_SCREEN_ON, which needs a visible window. */
-    @Suppress("DEPRECATION")
-    private val screenLock = pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "BentoBar:keepAwake").apply { setReferenceCounted(false) }
+    /** Closes the popup last opened via [openAt], if it is still open. */
+    fun closeShared() = menus.closeShared()
 
     // ---- tests (adb only) --------------------------------------------------------------------
 
     fun debug(cmd: List<String>): String {
         fun first(type: String) = Store.config.value.items.firstOrNull { it.type == type || it.id == type }
+        // What names no item goes to the carrier's strip; what names one, to the strip that drew it.
+        val strip = carrierStrip()
+        val events = events.getValue(strip)
+        // A hook for one strip can name its area (left, middle, right), whose strip must be on screen; with no word it is the
+        // carrier's, as it was with one strip.
+        fun stripOf(area: String?) = if (area == null) strip else strips.firstOrNull { it.shown && word(it.area) == area }
         return when (cmd.firstOrNull()) {
-            "dump" -> "snap=$snap look=${look.value} expanded=${expanded.value} menu=$menuKey shown=${strip.shown} placed=$placed"
+            "dump" -> "snap=$snap look=${look.value} expanded=${expanded.value} menu=${menus.menuKey} shown=${strips.any { it.shown }} empty=$stripEmpty " +
+                "carrier=${word(carrier)} owed=${owed.value.map { word(it) }} " + strips.joinToString(" ") {
+                    "${word(it.area)}[shown=${it.shown} empty=${it.empty} pending=${it.pending} width=${it.params.width} x=${it.params.x} " +
+                        "budget=${it.maxWidth.intValue} placed=${it.placed}]"
+                }
             "open", "ctx" -> {
                 val item = first(cmd.getOrElse(1) { "" }) ?: return "no such item"
-                val at = placed[item.id] ?: return "item not drawn yet"
-                if (cmd[0] == "open") events.click(item, at) else events.context(item, at); "ok"
+                val drew = strips.firstOrNull { item.id in it.placed } ?: return "item not drawn yet"
+                val at = drew.placed.getValue(item.id)
+                this.events.getValue(drew).let { if (cmd[0] == "open") it.click(item, at) else it.context(item, at) }; "ok"
             }
             "tip" -> {
                 val item = first(cmd.getOrElse(1) { "" }) ?: return "no such item"
-                val at = placed[item.id] ?: return "item not drawn yet"
-                if (cmd.getOrNull(2) == "off") hideTip() else showTooltip(item, at); "ok"
+                val drew = strips.firstOrNull { item.id in it.placed } ?: return "item not drawn yet"
+                val at = drew.placed.getValue(item.id)
+                if (cmd.getOrNull(2) == "off") menus.hideTip(now = true) else menus.showTooltip(drew, item, at); "ok"
             }
-            "chevron" -> { events.chevron(Rect()); "expanded=${expanded.value}" }
+            "chevron" -> { val on = stripOf(cmd.getOrNull(1)) ?: return "no such strip"; this.events.getValue(on).chevron(Rect()); "expanded=${expanded.value}" }
             "scroll" -> {
                 val item = first(cmd.getOrElse(1) { "" }) ?: return "no such item"
                 events.scroll(item, cmd.getOrNull(2)?.toIntOrNull() ?: 1); "ok"
             }
-            "barmenu" -> { events.chevronContext(placed["chevron"] ?: Rect(0, 0, 40, 40)); "ok" }
-            "hover" -> { events.hover(cmd.getOrNull(1) == "on"); "ok" }
-            "close" -> { closeMenu(); "ok" }
+            "barmenu" -> { events.chevronContext(strip.placed["chevron"] ?: Rect(0, 0, 40, 40)); "ok" }
+            "hover" -> { val on = stripOf(cmd.getOrNull(2)) ?: return "no such strip"; this.events.getValue(on).hover(cmd.getOrNull(1) == "on"); "ok" }
+            "close" -> { menus.closeMenu(); "ok" }
             "solid" -> { MenuWindow.solid = cmd.getOrNull(1) != "off"; "solid=${MenuWindow.solid}" }
             "scan" -> { scan(); "snap=$snap" }
-            "windows" -> service.windows.joinToString(" | ") { w ->
-                val r = Rect().also { w.getBoundsInScreen(it) }
-                "${w.id}:t${w.type}:${w.title}:${r.toShortString()}"
-            }
-            "alldisplays" -> runCatching { service.windowsOnAllDisplays }.getOrNull()?.let { all ->
-                (0 until all.size()).joinToString(" || ") { i ->
-                    "d${all.keyAt(i)}: " + all.valueAt(i).joinToString(" | ") { w ->
-                        val r = Rect().also { w.getBoundsInScreen(it) }
-                        "${w.id}:t${w.type}:${w.title}:${r.toShortString()}"
-                    }
-                }
-            } ?: "none"
-            "tree" -> {
-                val id = cmd.getOrNull(1)?.toIntOrNull()
-                val w = runCatching { service.windowsOnAllDisplays }.getOrNull()?.let { all -> (0 until all.size()).flatMap { all.valueAt(it) } }
-                    ?.firstOrNull { it.id == id } ?: return "no such window"
-                val out = StringBuilder()
-                fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, depth: Int) {
-                    if (n == null || depth > 12) return
-                    val r = Rect().also { n.getBoundsInScreen(it) }
-                    out.append(" ¦").append("-".repeat(depth)).append(n.className?.toString()?.substringAfterLast('.')).append(' ')
-                        .append(n.viewIdResourceName?.substringAfter(":id/") ?: "").append(' ').append(r.toShortString())
-                        .append(if (n.contentDescription != null) " cd" else "").append(if (n.isClickable) " click" else "")
-                    for (c in 0 until n.childCount) walk(n.getChild(c), depth + 1)
-                }
-                walk(w.root, 0); out.toString()
-            }
-            "sample" -> { sampleColor(); "sampling" }
+            "sample" -> { colors.sampleNow(); "sampling" }
             "semblur" -> {
                 SemBlur.enabled = cmd.getOrNull(1) != "off"
                 "semblur=${SemBlur.wanted} available=${SemBlur.available}"
@@ -1203,7 +1012,7 @@ class BarController(private val service: AccessibilityService, val displayId: In
             "batteryprobe" -> service.getSystemService(android.os.BatteryManager::class.java).let { bm ->
                 (6..12).joinToString(" ") { "$it=${runCatching { bm.getIntProperty(it) }.getOrElse { e -> e.javaClass.simpleName }}" }
             }
-            "batteryextras" -> service.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.extras?.let { x ->
+            "batteryextras" -> service.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.extras?.let { x ->
                 x.keySet().sorted().joinToString(" ") { k -> "$k=${@Suppress("DEPRECATION") x.get(k)}" }
             } ?: "none"
             "trace" -> { tracing = cmd.getOrNull(1) != "off"; "trace=$tracing" }
@@ -1212,9 +1021,6 @@ class BarController(private val service: AccessibilityService, val displayId: In
     }
 
     companion object {
-        private const val TOOLTIP_MAX_DP = 360
-        /** A popup left for another on a taskbar goes after this long anyway, if the new one never starts to rise. */
-        private const val HANDOFF_MAX_MS = 400L
         /** A desktop taskbar is no taller than this (DeX's is about 26 dp). */
         private const val TASKBAR_MAX_DP = 96
         /** Another window took the focus or became the active one: usually another app in front. */

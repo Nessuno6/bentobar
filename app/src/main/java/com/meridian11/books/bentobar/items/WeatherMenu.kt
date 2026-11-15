@@ -1,5 +1,13 @@
 package com.meridian11.books.bentobar.items
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.meridian11.books.bentobar.ui.Space
+import com.meridian11.books.bentobar.ui.Bento
+import com.meridian11.books.bentobar.ui.ButtonKind
+import com.meridian11.books.bentobar.ui.BentoButton
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -17,27 +25,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -52,7 +51,6 @@ import androidx.compose.ui.unit.sp
 import com.meridian11.books.bentobar.R
 import com.meridian11.books.bentobar.data.ItemConfig
 import com.meridian11.books.bentobar.data.Online
-import com.meridian11.books.bentobar.data.Section
 import com.meridian11.books.bentobar.data.Store
 import com.meridian11.books.bentobar.ui.ChoiceRow
 import com.meridian11.books.bentobar.ui.InfoRow
@@ -61,8 +59,10 @@ import com.meridian11.books.bentobar.ui.MenuCard
 import com.meridian11.books.bentobar.ui.MenuDivider
 import com.meridian11.books.bentobar.ui.MenuEntry
 import com.meridian11.books.bentobar.ui.MenuNote
+import com.meridian11.books.bentobar.ui.OffGate
 import com.meridian11.books.bentobar.ui.SearchField
 import com.meridian11.books.bentobar.ui.SearchStatus
+import com.meridian11.books.bentobar.ui.SearchWithResults
 import com.meridian11.books.bentobar.ui.SectionLabel
 import com.meridian11.books.bentobar.ui.Setup
 import com.meridian11.books.bentobar.ui.TextRow
@@ -149,7 +149,7 @@ internal fun hereChosen(): Boolean {
 
 /**
  * Android's question for the approximate location, and nothing more: Allow location, in the menu and
- * in the settings, leaves the Weather switch as it is (an item in Off may not turn it on). The answer
+ * in the settings, leaves the Weather switch as it is. The answer
  * wakes [WeatherHere] (MainActivity).
  */
 internal fun askLocation() = MainActivity.requestPermission(Env.app, Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -165,7 +165,7 @@ internal fun WeatherMenu(item: ItemConfig, host: MenuHost) {
     val source = WeatherItem.source
     val now = Now.wall()
     val staged = WeatherItem.staged(item) != null
-    val place = WeatherLoad.place(item, WeatherHere.fix)
+    val place = WeatherLoad.place(item, WeatherHere.place)
     // On opening (and when the city or the switch changes under the menu): a reading older than ten minutes is asked again.
     LaunchedEffect(item.id, place, on, staged) { if (!staged) source.opened(item) }
 
@@ -223,10 +223,8 @@ internal fun WeatherMenu(item: ItemConfig, host: MenuHost) {
             MenuEntry(Sym.CLOSE, stringResource(R.string.common_cancel)) { source.typed(by); changing = false }
         }
         // A layout that came with a city, or the switch off in Setup: the words, and the one entry that turns it on. Nothing is sent before it.
-        status is Status.Off -> MenuCard(Sym.CLOUD, city, stringResource(if (status.everOn) R.string.common_off_in_setup else R.string.weather_not_turned_on)) {
-            MenuNote(stringResource(R.string.weather_consent))
-            MenuEntry(Sym.TOGGLE_ON, stringResource(R.string.weather_turn_on)) { source.turnOn(); Ticker.refresh() }
-        }
+        status is Status.Off -> OffGate(Sym.CLOUD, city, stringResource(if (status.everOn) R.string.common_off_in_setup else R.string.weather_not_turned_on),
+            stringResource(R.string.weather_consent), stringResource(R.string.weather_turn_on)) { source.turnOn(); Ticker.refresh() }
         // My location, and where the device is isn't known: why, the one thing that helps, and a city instead.
         status is Status.NoLocation -> MenuCard(Sym.CLOUD, city, stringResource(when (status.why) {
             Locate.NOT_ALLOWED -> R.string.weather_here_not_allowed
@@ -328,54 +326,47 @@ private fun ForecastBody(f: Forecast) {
  * The city search, in the menu and in the item's settings: the field with its Search button, and
  * under it what the last search came to. Typing sends nothing; the button or Enter sends the name
  * (and turns the Weather switch on, see [WeatherSource.search]). [by] names this field, so an answer
- * shows only where it was asked for. Not [canSubmit]: an item in Off, which may ask nothing.
+ * shows only where it was asked for.
  */
 @Composable
-internal fun CitySearch(item: ItemConfig, by: String, initial: String, canSubmit: Boolean = true, onPick: (City, String?) -> Unit) {
+internal fun CitySearch(item: ItemConfig, by: String, initial: String, onPick: (City, String?) -> Unit) {
     val source = WeatherItem.source
     val asked by source.searching.collectAsState()
     // A debug build's test hook can put an answer here without asking anyone; it is looked for with the tick.
     rememberTick()
     val state = WeatherItem.stagedSearch ?: WeatherSource.shown(asked, by)
     var short by remember { mutableStateOf(false) }
-    val field = remember { FocusRequester() }
-    val first = remember { FocusRequester() }
     val places = ((state as? Ask.State.Done)?.answer as? Found.Places)?.list.orEmpty()
     // What was found belongs to this field while it is drawn: gone with it, so a menu opened later starts empty.
     DisposableEffect(by) { onDispose { source.typed(by) } }
-    // When places arrive the focus moves to the first, so Enter, Enter is search and take.
-    LaunchedEffect(places) { if (places.isNotEmpty()) runCatching { first.requestFocus() } }
-
-    // Down from the field goes to the first place, Up from there comes back.
-    Box(Modifier.onPreviewKeyEvent { e ->
-        if (places.isEmpty() || e.key != Key.DirectionDown) false
-        else { if (e.type == KeyEventType.KeyDown) runCatching { first.requestFocus() }; true }
-    }) {
-        SearchField(label = stringResource(R.string.weather_city_label), initial = initial, submit = stringResource(R.string.common_search), selectAll = true,
-            error = if (short) stringResource(R.string.weather_two_letters) else null, canSubmit = canSubmit, focus = field,
-            onChange = { short = false; source.typed(by) },
-            onEnter = { text -> short = WeatherRules.query(text) == null; if (!short) source.search(text, item, by) })
-    }
-    if (short) return
-    when (state) {
-        Ask.State.Idle -> {}
-        is Ask.State.Busy -> SearchStatus(stringResource(R.string.weather_searching))
-        is Ask.State.Done -> when (val found = state.answer) {
-            Found.Offline -> SearchStatus(stringResource(R.string.common_no_connection))
-            Found.NoAnswer -> SearchStatus(stringResource(R.string.weather_search_no_answer))
-            Found.Unasked -> {}
-            is Found.Places -> if (found.list.isEmpty()) SearchStatus(stringResource(R.string.weather_not_found)) else found.list.forEachIndexed { i, city ->
-                // Region and country on every place, so two of one name can be told apart.
-                val region = WeatherRules.region(city, WeatherItem.Words)
-                MenuEntry(Sym.LOCATION_ON, city.name, sub = region, modifier = if (i != 0) Modifier else Modifier.focusRequester(first).onPreviewKeyEvent { e ->
-                    if (e.key != Key.DirectionUp) false else { if (e.type == KeyEventType.KeyDown) runCatching { field.requestFocus() }; true }
-                }) { onPick(city, region) }
+    SearchWithResults(hasResults = places.isNotEmpty(), arrival = places,
+        field = {
+            SearchField(label = stringResource(R.string.weather_city_label), initial = initial, submit = stringResource(R.string.common_search), selectAll = true,
+                error = if (short) stringResource(R.string.weather_two_letters) else null, focus = field,
+                onChange = { short = false; source.typed(by) },
+                onEnter = { text -> short = WeatherRules.query(text) == null; if (!short) source.search(text, item, by) })
+        },
+        results = results@{ firstResult ->
+            if (short) return@results
+            when (state) {
+                Ask.State.Idle -> {}
+                is Ask.State.Busy -> SearchStatus(stringResource(R.string.weather_searching))
+                is Ask.State.Done -> when (val found = state.answer) {
+                    Found.Offline -> SearchStatus(stringResource(R.string.common_no_connection))
+                    Found.NoAnswer -> SearchStatus(stringResource(R.string.weather_search_no_answer))
+                    Found.Unasked -> {}
+                    is Found.Places -> if (found.list.isEmpty()) SearchStatus(stringResource(R.string.weather_not_found)) else found.list.forEachIndexed { i, city ->
+                        // Region and country on every place, so two of one name can be told apart.
+                        val region = WeatherRules.region(city, WeatherItem.Words)
+                        MenuEntry(Sym.LOCATION_ON, city.name, sub = region, modifier = if (i != 0) Modifier else firstResult) { onPick(city, region) }
+                    }
+                }
             }
-        }
-    }
+        })
 }
 
 /** The item's settings: the city (the same search as in the menu) or My location, what the bar shows, the unit and a label. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun WeatherOptions(item: ItemConfig, set: (ItemConfig) -> Unit) {
     val online by Online.state.collectAsState()
@@ -389,40 +380,42 @@ internal fun WeatherOptions(item: ItemConfig, set: (ItemConfig) -> Unit) {
     // One card serves whichever item is selected: nothing typed or opened for one item stays for the next.
     key(item.id) {
         var changing by remember { mutableStateOf(false) }
-        // Like Search, an item in Off may not turn the service on: the Where row above says where it is.
         val chooseHere: @Composable () -> Unit = {
-            TextButton(onClick = { set(WeatherRules.useHere(item)); source.typed(by); changing = false; hereChosen() }, enabled = item.section != Section.OFF) {
-                Text(stringResource(R.string.weather_use_here))
-            }
+            BentoButton(stringResource(R.string.weather_use_here), { set(WeatherRules.useHere(item)); source.typed(by); changing = false; hereChosen() },
+                kind = ButtonKind.TEXT)
         }
         Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-            Text(when {
-                here -> stringResource(R.string.weather_here_current)
-                city != null -> stringResource(R.string.weather_city_current, city)
-                else -> stringResource(R.string.weather_city_none)
-            }, style = MaterialTheme.typography.labelLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SymIcon(if (here) Sym.MY_LOCATION else Sym.LOCATION_ON, size = 18.sp, color = Bento.colors.ink2)
+                Spacer(Modifier.width(Space.s))
+                Text(when {
+                    here -> stringResource(R.string.weather_here_current)
+                    city != null -> stringResource(R.string.weather_city_current, city)
+                    else -> stringResource(R.string.weather_city_none)
+                }, style = Bento.type.strong, color = Bento.colors.ink)
+            }
             // The words before the first request, here as in the menu.
-            Text(stringResource(R.string.weather_consent), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.weather_consent), Modifier.padding(top = 2.dp), style = Bento.type.help, color = Bento.colors.ink2)
             if ((!here && WeatherRules.place(item) == null) || changing) {
-                CitySearch(item, by, initial = city ?: WeatherRules.cityOf(ZoneId.systemDefault().id), canSubmit = item.section != Section.OFF) { found, region ->
+                CitySearch(item, by, initial = city ?: WeatherRules.cityOf(ZoneId.systemDefault().id)) { found, region ->
                     set(WeatherRules.picked(item, found, region))
                     source.typed(by)
                     changing = false
                 }
-                Row(Modifier.offset(x = (-12).dp)) {
+                FlowRow(Modifier.offset(x = -Space.m)) {
                     if (!here) chooseHere()
-                    if (changing) TextButton(onClick = { source.typed(by); changing = false }) { Text(stringResource(R.string.common_cancel)) }
+                    if (changing) BentoButton(stringResource(R.string.common_cancel), { source.typed(by); changing = false }, kind = ButtonKind.TEXT)
                 }
-            } else Row(Modifier.offset(x = (-12).dp)) { // a text button's own padding: its words then start where the lines above do
+            } else FlowRow(Modifier.offset(x = -Space.m)) { // a text button's own padding: its words then start where the lines above do
                 // The field appears on a click, as in the menu, and takes the focus then: not each time the item is selected.
-                TextButton(onClick = { changing = true }) { Text(stringResource(R.string.weather_change_city)) }
+                BentoButton(stringResource(R.string.weather_change_city), { changing = true }, kind = ButtonKind.TEXT)
                 if (!here) chooseHere()
                 // Back from My location to the item's own city, which it kept.
-                else if (city != null) TextButton(onClick = { set(WeatherRules.useCity(item)); source.typed(by) }) { Text(stringResource(R.string.weather_use_city, city)) }
+                else if (city != null) BentoButton(stringResource(R.string.weather_use_city, city), { set(WeatherRules.useCity(item)); source.typed(by) }, kind = ButtonKind.TEXT)
                 // A layout that came with a city, or the switch off in Setup: the same act as the menu's.
-                if (!on) TextButton(onClick = { source.turnOn(); Ticker.refresh() }) { Text(stringResource(R.string.weather_turn_on)) }
+                if (!on) BentoButton(stringResource(R.string.weather_turn_on), { source.turnOn(); Ticker.refresh() }, kind = ButtonKind.TEXT)
                 // My location without the permission (refused, or taken back in Android's settings): Android's question only.
-                if (here && !setup.location) TextButton(onClick = { askLocation() }) { Text(stringResource(R.string.weather_allow_location)) }
+                if (here && !setup.location) BentoButton(stringResource(R.string.weather_allow_location), { askLocation() }, kind = ButtonKind.TEXT)
             }
         }
     }
@@ -437,4 +430,5 @@ internal fun WeatherOptions(item: ItemConfig, set: (ItemConfig) -> Unit) {
     }
     TextRow(stringResource(R.string.option_label), item.opt("label", ""), help = stringResource(R.string.weather_label_help),
         placeholder = stringResource(R.string.option_none), maxLength = WeatherRules.LABEL_CHARS) { set(item.with("label", WeatherRules.label(it).ifEmpty { null })) }
+    Text(stringResource(R.string.weather_data_by), Modifier.padding(bottom = Space.s), style = Bento.type.help, color = Bento.colors.ink3)
 }

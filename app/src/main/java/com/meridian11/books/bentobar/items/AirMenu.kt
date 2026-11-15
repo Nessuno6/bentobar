@@ -1,5 +1,17 @@
 package com.meridian11.books.bentobar.items
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.width
+import com.meridian11.books.bentobar.util.SymIcon
+import com.meridian11.books.bentobar.ui.Space
+import com.meridian11.books.bentobar.ui.Bento
+import com.meridian11.books.bentobar.ui.ButtonKind
+import com.meridian11.books.bentobar.ui.BentoButton
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -10,17 +22,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -29,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import com.meridian11.books.bentobar.R
 import com.meridian11.books.bentobar.data.ItemConfig
 import com.meridian11.books.bentobar.data.Online
-import com.meridian11.books.bentobar.data.Section
 import com.meridian11.books.bentobar.data.Store
 import com.meridian11.books.bentobar.ui.ChoiceRow
 import com.meridian11.books.bentobar.ui.InfoRow
@@ -37,8 +44,10 @@ import com.meridian11.books.bentobar.ui.MenuCard
 import com.meridian11.books.bentobar.ui.MenuDivider
 import com.meridian11.books.bentobar.ui.MenuEntry
 import com.meridian11.books.bentobar.ui.MenuNote
+import com.meridian11.books.bentobar.ui.OffGate
 import com.meridian11.books.bentobar.ui.Setup
 import com.meridian11.books.bentobar.ui.rememberTick
+import com.meridian11.books.bentobar.ui.updatedNote
 import com.meridian11.books.bentobar.util.Now
 import com.meridian11.books.bentobar.util.Sym
 import java.time.ZoneId
@@ -53,7 +62,7 @@ internal fun AirMenu(item: ItemConfig, host: MenuHost) {
     val online by Online.state.collectAsState()
     val on = Online.Service.OPEN_METEO in online.on
     val now = Now.wall()
-    val place = AirLoad.place(item, WeatherHere.fix)
+    val place = AirLoad.place(item, WeatherHere.place)
     LaunchedEffect(item.id, place, on) { AirItem.opened(item) }
 
     var changing by remember(item.id) { mutableStateOf(false) }
@@ -87,9 +96,9 @@ internal fun AirMenu(item: ItemConfig, host: MenuHost) {
         }
     }
 
-    val reading = AirItem.reading(item, ask = false)
+    val status = AirItem.status(item, now)
     when {
-        !here && WeatherRules.place(item) == null && !AirItem.isStaged(item) -> MenuCard(Sym.AIR, name, stringResource(R.string.common_not_set_up)) {
+        status == Status.NotSetUp -> MenuCard(Sym.AIR, name, stringResource(R.string.common_not_set_up)) {
             MenuNote(stringResource(R.string.weather_consent))
             CitySearch(item, by, initial = WeatherRules.cityOf(ZoneId.systemDefault().id), onPick = pick)
             MenuDivider()
@@ -101,12 +110,10 @@ internal fun AirMenu(item: ItemConfig, host: MenuHost) {
             if (!here) useHere() else useCity()
             MenuEntry(Sym.CLOSE, stringResource(R.string.common_cancel)) { source.typed(by); changing = false }
         }
-        !on && !AirItem.isStaged(item) -> MenuCard(Sym.AIR, city, stringResource(if (Online.setUp(Online.Service.OPEN_METEO)) R.string.common_off_in_setup else R.string.weather_not_turned_on)) {
-            MenuNote(stringResource(R.string.weather_consent))
-            MenuEntry(Sym.TOGGLE_ON, stringResource(R.string.weather_turn_on)) { Online.turnOn(Online.Service.OPEN_METEO); Ticker.refresh(AirItem.type) }
-        }
-        here && place == null && !AirItem.isStaged(item) -> {
-            val why = WeatherHere.why
+        status is Status.Off -> OffGate(Sym.AIR, city, stringResource(if (status.everOn) R.string.common_off_in_setup else R.string.weather_not_turned_on),
+            stringResource(R.string.weather_consent), stringResource(R.string.weather_turn_on)) { Online.turnOn(Online.Service.OPEN_METEO); Ticker.refresh(AirItem.type) }
+        status is Status.NoLocation -> {
+            val why = status.why
             MenuCard(Sym.AIR, city, stringResource(when (why) {
                 Locate.NOT_ALLOWED -> R.string.weather_here_not_allowed
                 Locate.OFF -> R.string.weather_here_off
@@ -128,54 +135,56 @@ internal fun AirMenu(item: ItemConfig, host: MenuHost) {
                 changeCity()
             }
         }
-        reading == null || (!reading.hasValues && reading.failure == null) -> MenuCard(Sym.AIR, city, stringResource(R.string.usage_loading)) {
-            useCity(); changeCity()
-        }
-        !reading.hasValues -> {
-            val offline = reading.failure == Failure.OFFLINE
+        status is Status.Missing -> {
+            val offline = status.failure == Failure.OFFLINE
             MenuCard(Sym.AIR, city, stringResource(if (offline) R.string.common_no_connection else R.string.weather_no_answer)) {
                 MenuEntry(Sym.REFRESH, stringResource(R.string.common_try_again)) { AirItem.refresh(item) }
                 useCity(); changeCity()
             }
         }
-        else -> {
-            val eu = item.opt("scale", "us") == "eu"
-            val aqi = AirRules.aqiOf(reading, eu) ?: 0
-            val band = AirItem.bandLabel(AirRules.bandOf(aqi, eu))
-            val uv = reading.uv ?: 0.0
-            val uvStr = AirRules.formatUv(uv)
-            val uvBand = AirItem.uvBandLabel(AirRules.uvBand(uv))
-            val sub = stringResource(R.string.air_subtitle, "$band ($aqi)", uvStr, uvBand)
-            MenuCard(Sym.AIR, city, sub) {
-                InfoRow(stringResource(if (eu) R.string.air_scale_eu else R.string.air_scale_us), "$aqi · $band")
-                InfoRow(stringResource(R.string.air_uv_index), "$uvStr · $uvBand")
-                reading.uvMax?.let { InfoRow(stringResource(R.string.air_uv_peak), AirRules.formatUv(it)) }
-                reading.pm25?.let { InfoRow(stringResource(R.string.air_pm25), stringResource(R.string.air_ugm3, AirRules.formatUg(it))) }
-                reading.pm10?.let { InfoRow(stringResource(R.string.air_pm10), stringResource(R.string.air_ugm3, AirRules.formatUg(it))) }
-                reading.ozone?.let { InfoRow(stringResource(R.string.air_ozone), stringResource(R.string.air_ugm3, AirRules.formatUg(it))) }
-                Spacer(Modifier.height(4.dp))
-                val clock = WeatherItem.times().clock(reading.fetchedAt, ZoneId.systemDefault())
-                val updated = when (reading.failure) {
-                    Failure.OFFLINE -> stringResource(R.string.common_updated_offline, clock)
-                    null -> stringResource(R.string.common_updated, clock)
-                    else -> stringResource(R.string.common_updated_no_answer, clock)
-                }
-                MenuNote(stringResource(R.string.air_note, updated))
-                MenuDivider()
-                MenuEntry(Sym.REFRESH, stringResource(R.string.common_refresh)) { AirItem.refresh(item) }
-                useCity()
-                changeCity()
-                val site = stringResource(R.string.weather_open_site)
-                val opens = stringResource(R.string.common_opens_browser, site)
-                MenuEntry(Sym.OPEN_IN_NEW, site, modifier = Modifier.semantics { contentDescription = opens }) {
-                    host.close()
-                    Env.launch(Intent(Intent.ACTION_VIEW, Uri.parse(OPEN_METEO_SITE)))
-                }
-            }
+        status is Status.Live -> AirLive(item, status.reading, city, host, useCity, changeCity)
+        else -> MenuCard(Sym.AIR, city, stringResource(R.string.usage_loading)) {
+            useCity(); changeCity()
         }
     }
 }
 
+/** A reading worth showing. What the reply didn't have is left out, and each part is said on the scale it is on. */
+@Composable
+private fun AirLive(item: ItemConfig, r: AirRules.AirReading, city: String, host: MenuHost, useCity: @Composable () -> Unit, changeCity: @Composable () -> Unit) {
+    val eu = item.opt("scale", "us") == "eu"
+    val aqi = AirRules.aqiOf(r, eu)
+    val band = aqi?.let { AirItem.bandLabel(AirRules.bandOf(it)) }
+    val uv = r.uv?.let { AirRules.formatUv(it) }
+    val uvBand = r.uv?.let { AirItem.uvBandLabel(AirRules.uvBand(it)) }
+    val sub = when {
+        aqi != null && uv != null -> stringResource(R.string.air_subtitle, "$band (${aqi.value})", uv, uvBand.orEmpty())
+        aqi != null -> "$band (${aqi.value})"
+        else -> stringResource(R.string.air_subtitle_uv, uv.orEmpty(), uvBand.orEmpty())
+    }
+    MenuCard(Sym.AIR, city, sub) {
+        if (aqi != null) InfoRow(stringResource(if (aqi.eu) R.string.air_scale_eu else R.string.air_scale_us), "${aqi.value} · $band")
+        if (uv != null) InfoRow(stringResource(R.string.air_uv_index), "$uv · $uvBand")
+        r.uvMax?.let { InfoRow(stringResource(R.string.air_uv_peak), AirRules.formatUv(it)) }
+        r.pm25?.let { InfoRow(stringResource(R.string.air_pm25), stringResource(R.string.air_ugm3, AirRules.formatUg(it))) }
+        r.pm10?.let { InfoRow(stringResource(R.string.air_pm10), stringResource(R.string.air_ugm3, AirRules.formatUg(it))) }
+        r.ozone?.let { InfoRow(stringResource(R.string.air_ozone), stringResource(R.string.air_ugm3, AirRules.formatUg(it))) }
+        Spacer(Modifier.height(4.dp))
+        MenuNote(stringResource(R.string.air_note, updatedNote(r.fetchedAt, r.failure)))
+        MenuDivider()
+        MenuEntry(Sym.REFRESH, stringResource(R.string.common_refresh)) { AirItem.refresh(item) }
+        useCity()
+        changeCity()
+        val site = stringResource(R.string.weather_open_site)
+        val opens = stringResource(R.string.common_opens_browser, site)
+        MenuEntry(Sym.OPEN_IN_NEW, site, modifier = Modifier.semantics { contentDescription = opens }) {
+            host.close()
+            Env.launch(Intent(Intent.ACTION_VIEW, Uri.parse(OPEN_METEO_SITE)))
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AirOptions(item: ItemConfig, set: (ItemConfig) -> Unit) {
     val online by Online.state.collectAsState()
@@ -188,33 +197,36 @@ internal fun AirOptions(item: ItemConfig, set: (ItemConfig) -> Unit) {
     key(item.id) {
         var changing by remember { mutableStateOf(false) }
         val chooseHere: @Composable () -> Unit = {
-            TextButton(onClick = { set(WeatherRules.useHere(item)); source.typed(by); changing = false; hereChosen() }, enabled = item.section != Section.OFF) {
-                Text(stringResource(R.string.weather_use_here))
-            }
+            BentoButton(stringResource(R.string.weather_use_here), { set(WeatherRules.useHere(item)); source.typed(by); changing = false; hereChosen() },
+                kind = ButtonKind.TEXT)
         }
         Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-            Text(when {
-                here -> stringResource(R.string.weather_here_current)
-                city != null -> stringResource(R.string.weather_city_current, city)
-                else -> stringResource(R.string.weather_city_none)
-            }, style = MaterialTheme.typography.labelLarge)
-            Text(stringResource(R.string.weather_consent), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SymIcon(if (here) Sym.MY_LOCATION else Sym.LOCATION_ON, size = 18.sp, color = Bento.colors.ink2)
+                Spacer(Modifier.width(Space.s))
+                Text(when {
+                    here -> stringResource(R.string.weather_here_current)
+                    city != null -> stringResource(R.string.weather_city_current, city)
+                    else -> stringResource(R.string.weather_city_none)
+                }, style = Bento.type.strong, color = Bento.colors.ink)
+            }
+            Text(stringResource(R.string.weather_consent), Modifier.padding(top = 2.dp), style = Bento.type.help, color = Bento.colors.ink2)
             if ((!here && WeatherRules.place(item) == null) || changing) {
-                CitySearch(item, by, initial = city ?: WeatherRules.cityOf(ZoneId.systemDefault().id), canSubmit = item.section != Section.OFF) { found, region ->
+                CitySearch(item, by, initial = city ?: WeatherRules.cityOf(ZoneId.systemDefault().id)) { found, region ->
                     set(WeatherRules.picked(item, found, region))
                     source.typed(by)
                     changing = false
                 }
-                Row(Modifier.offset(x = (-12).dp)) {
+                FlowRow(Modifier.offset(x = -Space.m)) {
                     if (!here) chooseHere()
-                    if (changing) TextButton(onClick = { source.typed(by); changing = false }) { Text(stringResource(R.string.common_cancel)) }
+                    if (changing) BentoButton(stringResource(R.string.common_cancel), { source.typed(by); changing = false }, kind = ButtonKind.TEXT)
                 }
-            } else Row(Modifier.offset(x = (-12).dp)) {
-                TextButton(onClick = { changing = true }) { Text(stringResource(R.string.weather_change_city)) }
+            } else FlowRow(Modifier.offset(x = -Space.m)) {
+                BentoButton(stringResource(R.string.weather_change_city), { changing = true }, kind = ButtonKind.TEXT)
                 if (!here) chooseHere()
-                else if (city != null) TextButton(onClick = { set(WeatherRules.useCity(item)); source.typed(by) }) { Text(stringResource(R.string.weather_use_city, city)) }
-                if (!on) TextButton(onClick = { Online.turnOn(Online.Service.OPEN_METEO); Ticker.refresh(AirItem.type) }) { Text(stringResource(R.string.weather_turn_on)) }
-                if (here && !setup.location) TextButton(onClick = { askLocation() }) { Text(stringResource(R.string.weather_allow_location)) }
+                else if (city != null) BentoButton(stringResource(R.string.weather_use_city, city), { set(WeatherRules.useCity(item)); source.typed(by) }, kind = ButtonKind.TEXT)
+                if (!on) BentoButton(stringResource(R.string.weather_turn_on), { Online.turnOn(Online.Service.OPEN_METEO); Ticker.refresh(AirItem.type) }, kind = ButtonKind.TEXT)
+                if (here && !setup.location) BentoButton(stringResource(R.string.weather_allow_location), { askLocation() }, kind = ButtonKind.TEXT)
             }
         }
     }

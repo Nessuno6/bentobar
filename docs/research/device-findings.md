@@ -1,6 +1,7 @@
 # BentoBar: device findings (HP Googlebook 14, Android 17 / SDK 37)
 
-Checked over adb with the throwaway probe in `probe/` (package local.bentobar.probe).
+Checked over adb with a throwaway probe app (package local.bentobar.probe). It was never built by Gradle or shipped and is
+removed from the tree; its last commit before removal is `911d30b` (`git show 911d30b --stat` lists it).
 
 ## The desktop status bar (2026-09-27)
 - One window, `StatusBar`, type STATUS_BAR, 1920x41 px at the top (display 1920x1200, density 1.125,
@@ -126,3 +127,18 @@ Checked over adb with the throwaway probe in `probe/` (package local.bentobar.pr
   from when the screenshot is asked for), so two are never asked for closer than 400 ms: the watch is told
   when one is asked for, and a cause that arrives before its answer waits behind it.
 
+## More findings (2026-11-14, BentoBar 2.2; an XPS Googlebook, Snapdragon, 12 cores)
+- **The CPU item read several times the real load on a quiet device** (#53: 36% beside Task Manager's 13% on an HP
+  Googlebook). The idle-state counters (`cpuN/cpuidle/state{0,1}/time`, WFI and cpu-sleep-0 here) are added to when a
+  core *leaves* an idle state, never while it is in one, so a core that sleeps through a reading has nothing counted
+  for it yet and reads busy; when it wakes, the whole sleep is counted at once, often more than the reading's second.
+  Clamping each reading to 0..1 on its own kept the first part and dropped the second. Two minutes of a quiet device
+  read once a second over adb, beside `/proc/stat` (which the shell may read and an app may not): `/proc/stat` 2.0%,
+  each reading clamped 17.7% (up to 43%), the same counters over the whole two minutes about right. Cores 8 to 11 slept
+  through up to three readings in a row; cores 0 to 7 never did. With one core pinned busy for 20 s (`taskset`,
+  ended by `timeout`) `/proc/stat` read about 9.6% and the clamped readings 10 to 42%.
+- What fixed it (`items/CpuLoad.kt`): what a reading could not show is owed to the next readings, at most 5 s of it.
+  The same recordings then read 3.8% (quiet) and 7.5% (with the pinned core: 10 to 11% while it ran) against 2.0% and
+  5.0%. Limiting what is owed to 3 s or less made it worse; 5 s matched no limit.
+- From an app's sandbox (`run-as` a debuggable app): `/proc/stat`, `/proc/loadavg`, `/proc/schedstat`,
+  `/sys/fs/cgroup/cpu.stat` and `/dev/cpuctl/cpuacct.usage` are all denied; the idle counters are readable.

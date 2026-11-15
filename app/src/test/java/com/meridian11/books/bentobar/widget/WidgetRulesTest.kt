@@ -3,7 +3,7 @@ package com.meridian11.books.bentobar.widget
 import com.meridian11.books.bentobar.items.DevicesRules.Device
 import com.meridian11.books.bentobar.items.DevicesRules.Ears
 import com.meridian11.books.bentobar.items.DevicesRules.Kind as DeviceKind
-import com.meridian11.books.bentobar.items.LinkRules
+import com.meridian11.books.bentobar.items.DeviceLinkRules
 import com.meridian11.books.bentobar.widget.WidgetRules.Band
 import com.meridian11.books.bentobar.widget.WidgetRules.Cell
 import com.meridian11.books.bentobar.widget.WidgetRules.Grid
@@ -19,7 +19,7 @@ class WidgetRulesTest {
     private val self = Cell(WidgetRules.SELF, "Phone", Kind.PHONE, 77, false)
     private val mouse = Device("d1", "Pebble", DeviceKind.MOUSE, 95, false)
     private val buds = Device("d2", "Buds", DeviceKind.HEADPHONES, 54, false, Ears.BOTH)
-    private val tablet = Device("${LinkRules.PREFIX}0", "Tablet", DeviceKind.TABLET, 53, true)
+    private val tablet = Device("${DeviceLinkRules.PREFIX}0", "Tablet", DeviceKind.TABLET, 53, true)
     private val case = Cell("case:Buds", "Buds case", Kind.CASE, 100, false, seenAt = 1L)
 
     @Test fun thisDeviceComesFirstThenTheOthersByKindWithACaseAfterItsBuds() {
