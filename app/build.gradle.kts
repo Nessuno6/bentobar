@@ -12,8 +12,8 @@ android {
         applicationId = "com.meridian11.books.bentobar"
         minSdk = 34
         targetSdk = 37
-        versionCode = 28
-        versionName = "2.2.1-notch.1"
+        versionCode = 29
+        versionName = "2.2.1-notch.2"
     }
 
     // Release signing from ~/.config/bentobar (never committed). Absent -> unsigned release build.
@@ -86,7 +86,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     // Device batteries' link between two of the user's devices (items/Link): Google's Cross device SDK (developer preview).
     implementation("com.google.ambient.crossdevice:crossdevice:0.1.0-preview01")
-    implementation("com.google.android.gms:play-services-dtdi:16.0.0-beta01")
+    implementation("com.google.android.gms:play-services-dtdi:16.0.0-beta03")
     // Optional elevated reads without root via Shizuku (items/RootAccess + ShizukuService).
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)

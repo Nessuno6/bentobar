@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.widget.Toast
 import com.google.ambient.crossdevice.Participant
 import com.google.ambient.crossdevice.ParticipantImpl
 import com.google.ambient.crossdevice.connections.ConnectionReceiver
@@ -16,6 +17,7 @@ import com.google.ambient.crossdevice.connections.RemoteConnection
 import com.google.android.gms.dtdi.Dtdi
 import com.google.android.gms.dtdi.analytics.CorrelationData
 import com.google.android.gms.dtdi.core.WakeUpRequest
+import com.meridian11.books.bentobar.R
 import com.meridian11.books.bentobar.items.DevicesRules.Device
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
@@ -46,6 +48,9 @@ object Link {
     /** A link being opened (the other side is being woken). */
     @Volatile var connecting = false; private set
 
+    @Volatile private var attempt = 0
+    private var connectTimeout: Runnable? = null
+
     val linked: Boolean get() = connection?.isClosed == false
 
     /** The other side's devices as rows of Device batteries, besides [own]; none while not linked or when it went quiet. */
@@ -57,7 +62,7 @@ object Link {
 
     /** The picker's question, for `ui/LinkActivity`: the user's other devices, the one picked woken with [ACTION_WAKE]. */
     fun pickerIntent(context: Context, title: String) = Dtdi.getClient(context.applicationContext)
-        .createDevicePickerIntent(emptyList(), false, WakeUpRequest(ACTION_WAKE, emptyList(), title), null)
+        .createDevicePickerIntent(emptyList(), false, WakeUpRequest(ACTION_WAKE, emptyList(), title, emptyList()), null)
 
     /**
      * The device picked, from the picker's answer. Today's Play services answer in a newer layout than the SDK (2022)
@@ -71,8 +76,10 @@ object Link {
         var token: android.os.IBinder? = null
         var name: String? = null
         for (k in device.keySet()) {
-            if (token == null) token = runCatching { device.getBinder(k) }.getOrNull()
-            if (name == null) name = runCatching { @Suppress("DEPRECATION") device.get(k) as? String }.getOrNull()
+            @Suppress("DEPRECATION")
+            val value = runCatching { device.get(k) }.getOrNull()
+            if (token == null && value is android.os.IBinder) token = value
+            if (name == null && value is String) name = value
         }
         return token?.let { ParticipantImpl(name ?: "", it, CorrelationData.createNew(), Dtdi.getClient(context.applicationContext)) }
     }
@@ -80,20 +87,52 @@ object Link {
     private const val DEVICE_0 = "com.google.android.gms.dtdi.core.extra.DEVICE_0"
 
     /** The user picked [participant]: open the link (Google wakes BentoBar there, which accepts). */
-    fun open(participant: Participant) = start(participant) { participant.openConnection(CHANNEL) }
+    fun open(participant: Participant) = start(participant, notifyFailure = true) { participant.openConnection(CHANNEL) }
 
     /** Another device asked for a link (BentoBar was woken with [ACTION_WAKE]): accept it. */
-    fun accept(participant: Participant) = start(participant) { participant.acceptConnection(CHANNEL) }
+    fun accept(participant: Participant) = start(participant, notifyFailure = false) { participant.acceptConnection(CHANNEL) }
 
-    private fun start(participant: Participant, how: suspend () -> Result<RemoteConnection>) {
-        peer = participant.displayName.toString()
+    private fun start(participant: Participant, notifyFailure: Boolean, how: suspend () -> Result<RemoteConnection>) {
+        val id = ++attempt
+        val label = participant.displayName.toString()
+        peer = label
         connecting = true
-        Ticker.refresh()
-        scope.launch {
-            how().onSuccess { use(it) }.onFailure { android.util.Log.i(TAG, "link failed: ${it.javaClass.simpleName}") }
+        clearConnectTimeout()
+        val timeout = Runnable {
+            if (id != attempt || !connecting) return@Runnable
             connecting = false
             Ticker.refresh()
+            android.util.Log.i(TAG, "link timed out")
+            if (notifyFailure) showFailed(label)
         }
+        connectTimeout = timeout
+        main.postDelayed(timeout, DeviceLinkRules.CONNECT_TIMEOUT_MS)
+        Ticker.refresh()
+        scope.launch {
+            val result = runCatching { how() }.getOrElse { Result.failure(it) }
+            main.post {
+                if (id != attempt || !connecting) {
+                    result.getOrNull()?.let { runCatching { it.closeFuture() } }
+                    return@post
+                }
+                clearConnectTimeout()
+                result.onSuccess { use(it) }.onFailure {
+                    android.util.Log.i(TAG, "link failed: ${it.javaClass.simpleName}")
+                    if (notifyFailure) showFailed(label)
+                }
+                connecting = false
+                Ticker.refresh()
+            }
+        }
+    }
+
+    private fun clearConnectTimeout() {
+        connectTimeout?.let { main.removeCallbacks(it) }
+        connectTimeout = null
+    }
+
+    private fun showFailed(label: String) {
+        Toast.makeText(Env.app, Env.app.getString(R.string.link_could_not_connect, label), Toast.LENGTH_SHORT).show()
     }
 
     private fun use(c: RemoteConnection) {
@@ -108,6 +147,9 @@ object Link {
 
     /** Drops the link (Device batteries' Unlink). */
     fun unlink() {
+        attempt++
+        clearConnectTimeout()
+        connecting = false
         main.removeCallbacks(tick)
         connection?.let { c -> runCatching { c.closeFuture() } }
         connection = null

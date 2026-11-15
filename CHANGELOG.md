@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.1-notch.2 (2026-11-15)
+
+- **Hardened cross-device battery link (`LinkActivity` & `Link`):**
+  - Upgraded `com.google.android.gms:play-services-dtdi` from `16.0.0-beta01` to `16.0.0-beta03`, fixing the GMS Binder stub crash (`IllegalStateException: Required value was null.`) that left `createDevicePickerIntent` unsettled on error.
+  - Added an 8-second picker request watchdog timeout, cancellation/exception handling, disabled/timeout/failure Toast feedback, `singleTop` retry recovery, and recreation-safe `STATE_AWAITING_PICKER` handling to `LinkActivity` so its transparent overlay cannot get stuck blocking screen touches.
+  - Updated `WakeUpRequest` for `beta03`, fixed `Bundle.getBinder` warnings on string extras in `Link.picked`, and added a 20-second connection watchdog (`CONNECT_TIMEOUT_MS`), main-thread state serialization, and failure Toast feedback (`link_could_not_connect`) when linking another device.
+
 ## 2.2.1-notch.1 (2026-11-15)
 
 - **Added optional Shizuku support** (`moe.shizuku.manager.permission.API_V23`) alongside `su` root fallback: BentoBar prefers an isolated read-only Shizuku `UserService` when Shizuku is running and allowed (supporting both ADB `uid 2000` and root `uid 0` Shizuku servers), falls back to `su` where unavailable or where `uid 0` access is required, adds a live **Setup › Shizuku** status/Allow/Open row, and credits Shizuku API (Apache 2.0) in About.

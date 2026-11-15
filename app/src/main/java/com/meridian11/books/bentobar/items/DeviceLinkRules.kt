@@ -31,6 +31,8 @@ object DeviceLinkRules {
     const val EVERY_MS = 30_000L
     /** A status older than this is not shown: the other side stopped sending (two missed messages and some). */
     const val STALE_MS = 3 * EVERY_MS
+    /** How long an outbound or incoming link waits to settle before giving up so the menu does not stay stuck. */
+    const val CONNECT_TIMEOUT_MS = 20_000L
 
     /** A name as one field: no tabs or line breaks, and not too long. */
     private fun field(name: String) = name.replace(Regex("[\\t\\r\\n]+"), " ").trim().take(NAME_MAX)

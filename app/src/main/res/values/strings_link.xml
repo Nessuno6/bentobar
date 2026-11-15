@@ -8,4 +8,8 @@
     <string name="link_linked">Linked to %1$s</string>
     <string name="link_unlink">Unlink</string>
     <string name="link_note">Your phone or tablet with BentoBar, through Google Play services. Both share their battery and devices every 30 seconds while linked.</string>
+    <string name="link_disabled">Turn on Cross-device services in Google settings to link devices</string>
+    <string name="link_timeout">Google Play services did not respond in time</string>
+    <string name="link_failed">Could not open the device picker</string>
+    <string name="link_could_not_connect">Could not link to %1$s</string>
 </resources>
