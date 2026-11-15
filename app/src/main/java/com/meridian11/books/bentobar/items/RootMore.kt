@@ -2,39 +2,15 @@ package com.meridian11.books.bentobar.items
 
 import android.content.pm.PackageManager
 import android.os.SystemClock
-import java.util.concurrent.TimeUnit
 
 /**
- * One command run with `su` on a background thread, at most every [everyMs] while something wants it, its output turned
- * into [T] by [parse]. Where root is refused or absent, nothing is shown and it isn't asked again until BentoBar
- * restarts. Nothing it reads is logged.
+ * One command run via Shizuku or `su` on a background thread, at most every [everyMs] while something wants it, its
+ * output turned into [T] by [parse]. Nothing read is logged.
  */
-class RootReading<T>(private val command: String, private val everyMs: Long, private val parse: (String) -> T?) {
-    @Volatile var value: T? = null; private set
-    @Volatile private var refused = false
-    @Volatile private var running = false
-    @Volatile private var readAt = 0L
-
-    fun want() {
-        if (refused || running) return
-        if (SystemClock.elapsedRealtime() - readAt < everyMs) return
-        running = true
-        Thread({ read() }, "BentoBar root").start()
-    }
-
-    private fun read() {
-        try {
-            val p = ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
-            if (!p.waitFor(6, TimeUnit.SECONDS)) { p.destroy(); refused = true; return }
-            val out = p.inputStream.bufferedReader().readText()
-            val parsed = if (p.exitValue() == 0) parse(out) else null
-            if (parsed == null) refused = true else { value = parsed; readAt = SystemClock.elapsedRealtime() }
-        } catch (e: Exception) {
-            refused = true
-        } finally {
-            running = false
-        }
-    }
+class RootReading<T>(command: String, everyMs: Long, parse: (String) -> T?) {
+    private val reading = PrivReading(command, everyMs, parse = parse)
+    val value: T? get() = reading.value
+    fun want() = reading.want()
 }
 
 /**
@@ -150,63 +126,77 @@ object RootBt {
     private const val EVERY_MS = 60_000L
     /** A watch level older than this is no longer the watch's. */
     private const val WATCH_FRESH_MS = 3 * 60 * 60_000L
-    @Volatile private var refused = false
+    @Volatile private var companionsRefusedEpoch = -1
+    @Volatile private var sidesRefusedEpoch = -1
+    @Volatile private var watchesRefusedEpoch = -1
     private var sidesAt = 0L
     private var sides: Map<String, DevicesRules.Ears> = emptyMap()
     private var watchesAt = 0L
     private var watches: Map<String, Pair<Int, Long>> = emptyMap()
-
-    /** [command] as root, its output; null where root is refused or it failed. Blocks: background threads only. */
-    private fun run(command: String): String? {
-        if (refused) return null
-        // In the system's own mount namespace: started from an app, su sees the app's, where other apps' data folders
-        // (the watch plugin's records) are hidden. Where su has no such option, as it is.
-        return attempt(listOf("su", "--mount-master", "-c", command)) ?: attempt(listOf("su", "-c", command)).also { if (it == null) refused = true }
-    }
-
-    /** [argv] with "; true" after its command (one that finds nothing, grep without a match, isn't a failure); null on failure. */
-    private fun attempt(argv: List<String>): String? = try {
-        val p = ProcessBuilder(argv.dropLast(1) + (argv.last() + "; true")).redirectErrorStream(true).start()
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(8, TimeUnit.SECONDS)) { p.destroy(); null } else if (p.exitValue() != 0) null else out
-    } catch (e: Exception) { null }
 
     /** A Bluetooth device came or went: the ears and the companion list are read again on the next look. */
     @Synchronized fun forgetSides() { sidesAt = 0L; companionsAt = 0L }
 
     private var companionsAt = 0L
     private var companions: Map<String, DevicesRules.Companion> = emptyMap()
-    /** The companion list is read this often at most: it is live, and a read starts a process. */
+    /** The companion list is read this often at most: it is live, and a read starts a process if not using Shizuku. */
     private const val COMPANIONS_MS = 30_000L
 
     /**
-     * Samsung's companion-device battery list (what its battery widget shows), read by BentoBar's own [RootTool] run as
-     * root: only the system may ask for it, and root counts as the system. The record of [address], if any.
+     * Samsung's companion-device battery list (what its battery widget shows), read via Shizuku or `su` + [RootTool]:
+     * only the system or shell may ask Android for it. The record of [address], if any.
      */
     @Synchronized fun companion(address: String): DevicesRules.Companion? {
         val now = SystemClock.elapsedRealtime()
-        if (now - companionsAt > COMPANIONS_MS) {
+        val ep = Priv.epoch
+        if (companionsRefusedEpoch != ep && now - companionsAt > COMPANIONS_MS) {
             companionsAt = now
-            val apk = Env.app.applicationInfo.sourceDir
-            run("CLASSPATH=$apk app_process /system/bin ${RootTool::class.java.name} batteries")?.let { companions = DevicesRules.companions(it) }
+            val res = Priv.companions()
+            if (res == null) {
+                if (Priv.epoch == ep) companionsRefusedEpoch = ep
+            } else {
+                companions = res
+                companionsRefusedEpoch = -1
+            }
         }
         return companions[address.uppercase()]
     }
 
     @Synchronized fun side(address: String): DevicesRules.Ears? {
         val now = SystemClock.elapsedRealtime()
-        if (now - sidesAt > EVERY_MS) {
+        val ep = Priv.epoch
+        if (sidesRefusedEpoch != ep && now - sidesAt > EVERY_MS) {
             sidesAt = now
-            run("dumpsys bluetooth_manager | grep -E 'Device \\[|Audio Locations'")?.let { sides = DevicesRules.sides(it) }
+            val res = Priv.read(
+                "dumpsys bluetooth_manager | grep -E 'Device \\[|Audio Locations'; true",
+                timeoutMs = 8_000,
+                mountMaster = false,
+            ) { out ->
+                if ("Permission Denial" in out || "Can't find service" in out) null
+                else DevicesRules.sides(out)
+            }
+            if (res == null) {
+                if (Priv.epoch == ep) sidesRefusedEpoch = ep
+            } else {
+                sides = res
+                sidesRefusedEpoch = -1
+            }
         }
         return sides[address.takeLast(5).lowercase()]
     }
 
     @Synchronized fun watchLevel(address: String): Int? {
         val now = SystemClock.elapsedRealtime()
-        if (now - watchesAt > EVERY_MS) {
+        val ep = Priv.epoch
+        if (watchesRefusedEpoch != ep && now - watchesAt > EVERY_MS) {
             watchesAt = now
-            readWatches()?.let { watches = it }
+            val res = readWatches()
+            if (res == null) {
+                if (Priv.epoch == ep) watchesRefusedEpoch = ep
+            } else {
+                watches = res
+                watchesRefusedEpoch = -1
+            }
         }
         val (level, at) = watches[address.uppercase()] ?: return null
         return level.takeIf { System.currentTimeMillis() - at < WATCH_FRESH_MS }
@@ -215,10 +205,12 @@ object RootBt {
     /**
      * The Galaxy Wearable plugins' battery records (com.samsung.wearable.watch…plugin, one per watch model): their
      * database and its write-ahead log, copied out as base64 and read here, the latest level of each watch's address.
+     * Requires UID 0 (`su --mount-master` or Shizuku started with root).
      */
     private fun readWatches(): Map<String, Pair<Int, Long>>? {
-        val out = run("for d in /data/data/com.samsung.wearable.watch*plugin/databases; do [ -f \$d/battery_db ] || continue; " +
-            "echo DB; base64 -w 0 \$d/battery_db; echo; echo WAL; [ -f \$d/battery_db-wal ] && base64 -w 0 \$d/battery_db-wal; echo; done") ?: return null
+        val cmd = "for d in /data/data/com.samsung.wearable.watch*plugin/databases; do [ -f \$d/battery_db ] || continue; " +
+            "echo DB; base64 -w 0 \$d/battery_db; echo; echo WAL; [ -f \$d/battery_db-wal ] && base64 -w 0 \$d/battery_db-wal; echo; done; true"
+        val out = Priv.read(cmd, timeoutMs = 8_000, rootOnly = true, mountMaster = true) { it } ?: return null
         val all = HashMap<String, Pair<Int, Long>>()
         val lines = out.lines()
         var i = 0

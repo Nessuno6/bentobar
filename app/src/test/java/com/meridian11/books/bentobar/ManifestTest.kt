@@ -24,9 +24,10 @@ class ManifestTest {
 
     @Test fun theOtherAppsBentoBarLooksForAreTheLaunchersAndTheFeedbackApp() {
         // Package visibility, not a permission: the apps in the launcher (folders, app shortcuts) and, by name, the
-        // Googlebook's Feedback app (the Shortcut item's Report a bug). Nothing else is looked for.
+        // Googlebook's Feedback app (the Shortcut item's Report a bug) plus Shizuku manager. Nothing else is looked for.
         val queries = manifest.all("queries").single()
-        assertEquals(listOf(com.meridian11.books.bentobar.items.ShortcutRules.FEEDBACK_PACKAGE), queries.all("package").map { it.attr("name") })
+        assertEquals(listOf(com.meridian11.books.bentobar.items.ShortcutRules.FEEDBACK_PACKAGE, com.meridian11.books.bentobar.items.Priv.SHIZUKU_PACKAGE),
+            queries.all("package").map { it.attr("name") })
         assertEquals(listOf("android.intent.action.MAIN"), queries.all("intent").flatMap { it.all("action") }.map { it.attr("name") })
         assertEquals(listOf("android.intent.category.LAUNCHER"), queries.all("intent").flatMap { it.all("category") }.map { it.attr("name") })
     }
@@ -54,6 +55,8 @@ class ManifestTest {
             "android.permission.MODIFY_AUDIO_SETTINGS",
             "android.permission.ACCESS_NOTIFICATION_POLICY",
             "android.permission.WRITE_SETTINGS",
+            // Optional read-only Shizuku access for elevated hardware/process/Bluetooth metrics without root.
+            "moe.shizuku.manager.permission.API_V23",
         ), manifest.all("uses-permission").map { it.attr("name") }.toSet())
     }
 
@@ -144,7 +147,10 @@ class ManifestTest {
         val exported = (application.all("activity") + application.all("service") + application.all("receiver") + application.all("provider"))
             .filter { it.attr("exported") == "true" }.map { it.attr("name") }.toSet()
         assertEquals(setOf(".ui.MainActivity", ".ui.BarMenuActivity", ".ui.LinkActivity", ".bar.BarService", ".tile.BarTile", ".tile.AwakeTile", ".tile.TimerTile",
-            ".items.MediaAccess", ".items.NoticeAccess", ".items.DevicesProvider", ".items.ItemsProvider", ".widget.WidgetSettingsActivity"), exported)
+            ".items.MediaAccess", ".items.NoticeAccess", ".items.DevicesProvider", ".items.ItemsProvider", ".widget.WidgetSettingsActivity",
+            "rikka.shizuku.ShizukuProvider"), exported)
+        val shizukuProvider = application.all("provider").single { it.attr("name") == "rikka.shizuku.ShizukuProvider" }
+        assertEquals("android.permission.INTERACT_ACROSS_USERS_FULL", shizukuProvider.attr("permission"))
         for (service in application.all("service")) if (service.getAttributeNS(tools, "node") != "remove") {
             assertNotNull(service.attr("name"), service.attr("permission").takeIf { it.isNotEmpty() })
         }
@@ -194,7 +200,7 @@ class ManifestTest {
         val hooks = if (type == "debug") setOf(".util.DebugReceiver", ".util.BarFlipActivity") else emptySet()
         assertEquals(setOf(".ui.MainActivity", ".ui.BarMenuActivity", ".ui.LinkActivity", ".bar.BarService", ".tile.BarTile", ".tile.AwakeTile", ".tile.TimerTile",
             ".items.MediaAccess", ".items.NoticeAccess", ".items.DevicesProvider", ".items.ItemsProvider", ".widget.WidgetSettingsActivity",
-            "androidx.profileinstaller.ProfileInstallReceiver") + hooks, exported)
+            "rikka.shizuku.ShizukuProvider", "androidx.profileinstaller.ProfileInstallReceiver") + hooks, exported)
         // The one a library adds: AndroidX's profile installer, which only the shell (it holds DUMP) can start.
         val installer = app.all("receiver").single { it.attr("name") == "androidx.profileinstaller.ProfileInstallReceiver" }
         assertEquals("android.permission.DUMP", installer.attr("permission"))

@@ -16,7 +16,7 @@ object RootTool {
     fun main(args: Array<String>) {
         try {
             when (args.firstOrNull()) {
-                "batteries" -> batteries()
+                "batteries" -> print(readBatteries(null))
                 else -> println("unknown")
             }
         } catch (e: Throwable) {
@@ -27,18 +27,31 @@ object RootTool {
         System.exit(0)
     }
 
-    private fun batteries() {
-        if (android.os.Looper.getMainLooper() == null) @Suppress("DEPRECATION") android.os.Looper.prepareMainLooper()
-        val thread = Class.forName("android.app.ActivityThread").getMethod("systemMain").invoke(null)
-        val context = thread.javaClass.getMethod("getSystemContext").invoke(thread) as android.content.Context
-        val bm = context.getSystemService(android.os.BatteryManager::class.java)
-        val infos = bm.javaClass.getMethod("semGetDeviceBatteryInfos").invoke(bm) as? Array<*> ?: return
-        for (r in infos) {
-            if (r == null) continue
-            fun get(name: String): Any? = runCatching { r.javaClass.getMethod(name).invoke(r) }.getOrNull()
-            println(listOf("device", get("getAddress"), get("getDeviceType"), get("getBatteryLevel"), get("getBatteryStatus"),
-                get("getExtraBatteryLevelLeft"), get("getExtraBatteryLevelRight"), get("getExtraBatteryLevelCradle"),
-                get("getExtraBatteryStatusLeft"), get("getExtraBatteryStatusRight"), get("getExtraBatteryStatusCradle")).joinToString("\t"))
+    /** Companion-device battery lines, or empty when Samsung reports none; throws only on reflection/access failure. */
+    fun readBatteries(givenContext: android.content.Context?): String {
+        val context = givenContext ?: run {
+            val atClass = Class.forName("android.app.ActivityThread")
+            val existing = runCatching { atClass.getMethod("currentActivityThread").invoke(null) }.getOrNull()
+            val thread = existing ?: run {
+                if (android.os.Looper.getMainLooper() == null) {
+                    @Suppress("DEPRECATION")
+                    android.os.Looper.prepareMainLooper()
+                }
+                atClass.getMethod("systemMain").invoke(null)
+            }
+            thread.javaClass.getMethod("getSystemContext").invoke(thread) as android.content.Context
+        }
+        val bm = context.getSystemService(android.os.BatteryManager::class.java) ?: return ""
+        val infos = bm.javaClass.getMethod("semGetDeviceBatteryInfos").invoke(bm) as? Array<*> ?: return ""
+        return buildString {
+            for (r in infos) {
+                if (r == null) continue
+                fun get(name: String): Any? = runCatching { r.javaClass.getMethod(name).invoke(r) }.getOrNull()
+                append(listOf("device", get("getAddress"), get("getDeviceType"), get("getBatteryLevel"), get("getBatteryStatus"),
+                    get("getExtraBatteryLevelLeft"), get("getExtraBatteryLevelRight"), get("getExtraBatteryLevelCradle"),
+                    get("getExtraBatteryStatusLeft"), get("getExtraBatteryStatusRight"), get("getExtraBatteryStatusCradle")).joinToString("\t"))
+                append('\n')
+            }
         }
     }
 }

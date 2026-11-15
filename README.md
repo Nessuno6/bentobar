@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Add, hide and organise items in your status bar: on a Googlebook, and on Samsung tablets and phones with One UI.</b><br>
-  Your own items next to the system's icons, as an ordinary Android app: no root, no adb. With root, it reads more.
+  Your own items next to the system's icons, as an ordinary Android app: no root, no adb. With root or Shizuku, it reads more.
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/One_UI-9-1259E6" alt="One UI 9">
   <img src="https://img.shields.io/badge/Googlebook_OS-Android_17-133F43" alt="Googlebook OS, Android 17">
-  <img src="https://img.shields.io/badge/root-optional-6A4C93" alt="Root optional">
+  <img src="https://img.shields.io/badge/root%20or%20Shizuku-optional-6A4C93" alt="Root or Shizuku optional">
   <img src="https://img.shields.io/badge/goes_online-for_five_items_you_set_up_and_update_checks-2E7D32" alt="Goes online for five items you set up, and to check for updates">
   <img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT license">
   <img src="https://img.shields.io/badge/fork_tested_on-a_Galaxy_tablet-1F6F66" alt="This fork tested on a Galaxy tablet">
@@ -45,8 +45,8 @@
 - **Charging cases and charge speed:** the earbuds' case as last seen, and Samsung's charging steps up to Super fast
   2.0. [How it works](HOW-IT-WORKS.md#device-batteries-further)
 - **Updates from inside the app:** checks six times a day, and installs with your OK. [How it works](HOW-IT-WORKS.md#updates-from-inside-the-app)
-- **Root (optional):** temperatures, the apps using the CPU and memory, the battery's real cycles and health, a Galaxy
-  watch's and earbuds' levels. [What root adds, and why](HOW-IT-WORKS.md#root)
+- **Root or Shizuku (optional):** temperatures, the apps using the CPU and memory, the battery's real cycles and
+  health, a Galaxy watch's and earbuds' levels. [What root and Shizuku add, and why](HOW-IT-WORKS.md#root-and-shizuku)
 
 <p align="center"><sub>BentoBar is made by Meridian11 LLC, developed on a Googlebook. This fork adds to it, and is tested on a
 Samsung Galaxy tablet with One UI 9; Meridian11 doesn't make or support it (<a href="#about">more</a>).</sub></p>
@@ -87,10 +87,10 @@ hides when an app goes full screen or the screen locks.
 
 | Item | In the bar | In its menu |
 |---|---|---|
-| **CPU load** | busy %; can also pop out when the device runs hot | chart, per-core load, clock speeds, GPU load; with [root](HOW-IT-WORKS.md#root), CPU and GPU temperatures and the apps using the CPU |
+| **CPU load** | busy %; can also pop out when the device runs hot | chart, per-core load, clock speeds, GPU load; with [root or Shizuku](HOW-IT-WORKS.md#root-and-shizuku), CPU and GPU temperatures and the apps using the CPU |
 | **Network speed** | ↓ download ↑ upload | chart, totals since start-up, connection, addresses, gateway and DNS |
-| **Memory** | RAM in use | used, available, chart; with [root](HOW-IT-WORKS.md#root), the apps holding the most memory |
-| **Battery details** | watts, %, temperature or time to full; while charging, its icon shows the charge speed (a double bolt for Super fast 2.0) | power in or out, charge speed, voltage, current, health, cycles (the real ones and health in percent with [root](HOW-IT-WORKS.md#root)), thermal state |
+| **Memory** | RAM in use | used, available, chart; with [root or Shizuku](HOW-IT-WORKS.md#root-and-shizuku), the apps holding the most memory |
+| **Battery details** | watts, %, temperature or time to full; while charging, its icon shows the charge speed (a double bolt for Super fast 2.0) | power in or out, charge speed, voltage, current, health, cycles (the real ones and health in percent with [root or Shizuku](HOW-IT-WORKS.md#root-and-shizuku)), thermal state |
 | **Storage** | free space | used and free, shortcuts to clean up |
 | **Date and calendar** | the date, in your format | a month view, and the day's events (all-day ones too) with **Join** and **Directions**; tasks that apps like Todoist sync to your calendar are left out, here and in Next meeting |
 | **Next meeting** | title and countdown, until 3 a.m. tomorrow; just the icon when there are no more meetings | today's meetings with **Join** and **Directions** |
@@ -100,7 +100,7 @@ hides when an app goes full screen or the screen locks.
 | **Keep awake** | coffee cup: click to switch | 15 min to "until I turn it off" |
 | **Sound** | volume, as a number or as a slider you click or drag | volume slider, play/pause/next |
 | **Now playing** | the title while something plays | artwork, position, previous, play and next, other players. The title needs notification access (optional); without it the item still shows that something plays and controls it |
-| **Device batteries** | the lowest of your mouse, keyboard, stylus, controller, earbuds or watch, when it's low | every device that reports a battery, the earbuds' cases as last seen, and a linked phone or tablet running BentoBar; a Galaxy watch, ring or earbuds through Samsung's own list with [root](HOW-IT-WORKS.md#root) |
+| **Device batteries** | the lowest of your mouse, keyboard, stylus, controller, earbuds or watch, when it's low | every device that reports a battery, the earbuds' cases as last seen, and a linked phone or tablet running BentoBar; a Galaxy watch, ring or earbuds through Samsung's own list with [root or Shizuku](HOW-IT-WORKS.md#root-and-shizuku) |
 | **External displays** | connected monitor resolution & refresh rate (`4K 60Hz`), when plugged in | every display's resolution, refresh rate and HDR status, plus **Keep awake while connected** |
 | **Heat** | a word when Android slows a hot device | heat level, battery temperature |
 | **Weather** *(online)* | conditions and temperature of a city you pick or of where you are; rain or snow that is coming; optionally a word for the sky ("Partly cloudy", "Windy") | the next hours and days, sunrise and sunset. From [Open-Meteo](https://open-meteo.com) |
@@ -129,7 +129,7 @@ hides when an app goes full screen or the screen locks.
 
 <p align="center">
   <img src="docs/images/menus.png" width="880" alt="BentoBar menus with One UI icons: battery, CPU, memory and device batteries (names and apps blurred)">
-  <br><sub>Battery, CPU, Memory and Device batteries, each under its item. With root, the CPU menu adds temperatures and the apps using it, and Memory the apps holding it. Names and apps are blurred.</sub>
+  <br><sub>Battery, CPU, Memory and Device batteries, each under its item. With root or Shizuku, the CPU menu adds temperatures and the apps using it, and Memory the apps holding it. Names and apps are blurred.</sub>
 </p>
 
 ## Settings
@@ -190,7 +190,7 @@ stays either way.
   service, and for this fork's update check on GitHub. **Setup › Online services** switches each off. Nothing else
   leaves the device, except to your own other device when you [link them](HOW-IT-WORKS.md#another-devices-batteries-cross-device-sdk).
 - **Optional access**, each for the items that use it: calendar, approximate location (rounded to about 10 km),
-  notification access (it receives no notifications), usage access, installing its own updates, and [root](HOW-IT-WORKS.md#root).
+  notification access (it receives no notifications), usage access, installing its own updates, and [root or Shizuku](HOW-IT-WORKS.md#root-and-shizuku).
 - **Sharing with other apps** (Device batteries, the bar's items) is off by default, and each app needs your OK.
 - No accounts, ads or analytics, and nothing is sent to its developer.
 

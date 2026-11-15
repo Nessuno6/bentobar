@@ -1,13 +1,11 @@
 package com.meridian11.books.bentobar.items
 
 import android.content.pm.PackageManager
-import android.os.SystemClock
-import java.util.concurrent.TimeUnit
 
 /**
- * Which apps use the CPU, on a rooted device: Android doesn't let an app see other apps' processes, but `top` run as
- * root does. Read only while the CPU menu is open, at most every [EVERY_MS]; where root is refused or absent, nothing
- * is shown and it isn't asked again until BentoBar restarts. No process or app name is logged.
+ * Which apps use the CPU, via Shizuku or `su`: Android doesn't let an app see other apps' processes, but `top` run with
+ * elevated access does. Read only while the CPU menu is open, at most every [EVERY_MS]; where neither Shizuku nor root
+ * is granted, nothing is shown until Shizuku is granted or BentoBar restarts. No process or app name is logged.
  */
 object RootCpu {
     /**
@@ -16,48 +14,28 @@ object RootCpu {
      */
     data class User(val name: String, val share: Double, val system: Boolean = true)
 
-
     /** How many of each kind the menu lists. */
     const val EACH = 5
 
-    @Volatile var users: List<User>? = null; private set
-    @Volatile private var refused = false
-    @Volatile private var running = false
-    @Volatile private var readAt = 0L
-
-    /** The menu is open: read again, unless a reading is under way, was taken within [EVERY_MS] or root was refused. */
-    fun want() {
-        if (refused || running) return
-        if (SystemClock.elapsedRealtime() - readAt < EVERY_MS) return
-        running = true
-        Thread({ read() }, "BentoBar root cpu").start()
-    }
-
-    private fun read() {
-        try {
-            // Two frames a second apart: the second is the load over that second (the first is since each process began).
-            val p = ProcessBuilder("su", "-c", "top -b -n 2 -d 1 -s 1 -m 40 -o %CPU,NAME").redirectErrorStream(true).start()
-            if (!p.waitFor(6, TimeUnit.SECONDS)) { p.destroy(); refused = true; return }
-            val out = p.inputStream.bufferedReader().readText()
-            if (p.exitValue() != 0) { refused = true; return }
-            val cores = Runtime.getRuntime().availableProcessors()
-            val pm = Env.app.packageManager
-            users = parse(out, cores, TOP).map { u ->
-                val app = runCatching { pm.getApplicationInfo(u.name, 0) }.getOrNull()
-                u.copy(name = label(pm, u.name), system = app == null || pm.getLaunchIntentForPackage(u.name) == null)
-            }
-            readAt = SystemClock.elapsedRealtime()
-        } catch (e: Exception) {
-            refused = true // no su on this device, or it can't start
-        } finally {
-            running = false
+    private val reading = PrivReading(
+        // Two frames a second apart: the second is the load over that second (the first is since each process began).
+        "top -b -n 2 -d 1 -s 1 -m 40 -o %CPU,NAME",
+        EVERY_MS,
+        timeoutMs = 6_000,
+        keepEmpty = true,
+    ) { out ->
+        if (!out.contains("%CPU") || !out.contains("NAME")) return@PrivReading null
+        val cores = Runtime.getRuntime().availableProcessors()
+        val pm = Env.app.packageManager
+        parse(out, cores, TOP).map { u ->
+            appOrProcess(pm, u.name).let { (n, sys) -> u.copy(name = n, system = sys) }
         }
     }
 
-    /** An app's name for a package ("com.google.android.youtube" is YouTube); a system process keeps its own. */
-    private fun label(pm: PackageManager, name: String): String = runCatching {
-        pm.getApplicationInfo(name, 0).loadLabel(pm).toString()
-    }.getOrDefault(name)
+    val users: List<User>? get() = reading.value
+
+    /** The menu is open: read again, unless a reading is under way, was taken within [EVERY_MS] or failed for this epoch. */
+    fun want() = reading.want()
 
     /**
      * The busiest of `top`'s last frame (`%CPU NAME` rows under a header), with an app's processes together (its

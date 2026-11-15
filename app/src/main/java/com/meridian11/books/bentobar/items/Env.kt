@@ -77,6 +77,10 @@ object Env {
         wireOnline()
         // This fork's update check, every four hours while it is on (net/Updates).
         com.meridian11.books.bentobar.net.Updates.schedule(app)
+        Priv.init(app) {
+            com.meridian11.books.bentobar.ui.Setup.refresh(app)
+            Ticker.refresh()
+        }
         FlightItem.sweepAtStart()
         NowPlaying.init(app)
         // Before Timers: a timer that finished while BentoBar wasn't running ends in init, and its

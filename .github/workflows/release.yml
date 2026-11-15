@@ -1,21 +1,9 @@
-# Pushing a tag like v0.6 builds and signs that release and makes it a DRAFT GitHub release: the APK, its
-# SHA256SUMS and R8's mapping.txt. Someone installs the draft, runs it and publishes it (docs/RELEASING.md);
-# until then releases/latest still serves the previous release. The Play job uploads the bundle as a draft on
-# closed testing, but it is switched off while the repository variable PLAY_UPLOAD is "off" (the state today),
-# and a skipped Play job says so in a warning.
-# "Run workflow" on the Actions tab is a dry run: the same signed build and checks, nothing published; the
-# APK, checksums and mapping are kept as a run artifact.
-#
-# The signing key and the Play key are secrets of the environments "release" and "play", which only
-# main and v* tags can use; forks and pull requests never get them. The job that holds the signing
-# key uses only GitHub's own actions, pinned to exact commits, and the Play job never sees that key.
-# Gradle runs with the key on disk, so every dependency, plugin and the Gradle distribution itself is
-# pinned by checksum (gradle/verification-metadata.xml, distributionSha256Sum): a changed artifact fails the build.
+# Fork releases from notch-items are built, signed, and published manually from a local machine, so automatic tag
+# triggers are disabled here (upstream signing secrets are not configured on the fork).
+# "Run workflow" on the Actions tab remains available if release secrets are ever added.
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:

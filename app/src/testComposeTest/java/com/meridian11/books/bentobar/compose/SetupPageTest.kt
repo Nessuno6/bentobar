@@ -38,6 +38,7 @@ import com.meridian11.books.bentobar.items.Env
 import com.meridian11.books.bentobar.items.ItemGroup
 import com.meridian11.books.bentobar.items.ItemState
 import com.meridian11.books.bentobar.items.ItemType
+import com.meridian11.books.bentobar.items.PrivRules
 import com.meridian11.books.bentobar.ui.AboutPage
 import com.meridian11.books.bentobar.ui.AccessibilityDisclosure
 import com.meridian11.books.bentobar.ui.DANGER_VEIL
@@ -334,5 +335,44 @@ class SetupPageTest {
         val privacy = rule.onNode(hasText(str(R.string.about_privacy_text))).fetchSemanticsNode().boundsInRoot
         assertTrue(privacy.top > app.bottom)
         picture("about-narrow")
+    }
+
+    @Test fun shizukuRowNotInstalled() {
+        setup(SetupState(serviceOn = true, shizuku = PrivRules.ShizukuStatus.NOT_INSTALLED))
+        rule.onNode(hasTestTag("permission:shizuku")).assertExists()
+        rule.onNode(hasText(str(R.string.setup_shizuku_not_installed)) and within("permission:shizuku"), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText(str(R.string.setup_shizuku_open)) and within("permission:shizuku")).assertDoesNotExist()
+    }
+
+    @Test fun shizukuRowNotRunning() {
+        setup(SetupState(serviceOn = true, shizuku = PrivRules.ShizukuStatus.NOT_RUNNING))
+        rule.onNode(hasText(str(R.string.setup_shizuku_not_running))).assertExists()
+        rule.onNode(hasContentDescription(str(R.string.setup_action_for, str(R.string.setup_shizuku_open), str(R.string.setup_shizuku_title)))).assertExists()
+    }
+
+    @Test fun shizukuRowPreV11() {
+        setup(SetupState(serviceOn = true, shizuku = PrivRules.ShizukuStatus.PRE_V11))
+        rule.onNode(hasText(str(R.string.setup_shizuku_pre_v11))).assertExists()
+        rule.onNode(hasContentDescription(str(R.string.setup_action_for, str(R.string.setup_shizuku_open), str(R.string.setup_shizuku_title)))).assertExists()
+    }
+
+    @Test fun shizukuRowNeedsPermission() {
+        setup(SetupState(serviceOn = true, shizuku = PrivRules.ShizukuStatus.NEEDS_PERMISSION))
+        rule.onNode(hasText(str(R.string.setup_shizuku_text))).assertExists()
+        rule.onNode(hasContentDescription(str(R.string.setup_action_for, str(R.string.common_allow), str(R.string.setup_shizuku_title)))).assertExists()
+    }
+
+    @Test fun shizukuRowGrantedAdb() {
+        setup(SetupState(serviceOn = true, shizuku = PrivRules.ShizukuStatus.GRANTED, shizukuUid = 2000))
+        rule.onNode(hasText(str(R.string.setup_shizuku_granted_adb))).assertExists()
+        rule.onNode(hasText(str(R.string.setup_allowed)) and within("permission:shizuku"), useUnmergedTree = true).assertExists()
+        rule.onNode(hasContentDescription(str(R.string.setup_action_for, str(R.string.setup_shizuku_open), str(R.string.setup_shizuku_title)))).assertExists()
+    }
+
+    @Test fun shizukuRowGrantedRoot() {
+        setup(SetupState(serviceOn = true, shizuku = PrivRules.ShizukuStatus.GRANTED, shizukuUid = 0))
+        rule.onNode(hasText(str(R.string.setup_shizuku_granted_root))).assertExists()
+        rule.onNode(hasText(str(R.string.setup_allowed)) and within("permission:shizuku"), useUnmergedTree = true).assertExists()
+        rule.onNode(hasContentDescription(str(R.string.setup_action_for, str(R.string.setup_shizuku_open), str(R.string.setup_shizuku_title)))).assertExists()
     }
 }

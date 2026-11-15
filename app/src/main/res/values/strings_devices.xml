@@ -6,7 +6,7 @@
     <string name="trigger_devices">while a device\'s battery is below %1$s</string>
     <string name="trigger_devices_short">shows below %1$s</string>
     <string name="devices_none">No device reports a battery</string>
-    <string name="devices_note">Mice, keyboards, styluses, game controllers, headphones and watches that report their battery level, connected directly or over Bluetooth. A Galaxy watch\'s level needs root.</string>
+    <string name="devices_note">Mice, keyboards, styluses, game controllers, headphones and watches that report their battery level, connected directly or over Bluetooth. A Galaxy watch\'s level needs root or Shizuku.</string>
     <string name="devices_note_no_headphones">Mice, keyboards, styluses and game controllers that tell Android their battery level. Headphones, and Bluetooth devices that report only over Bluetooth, need permission to see your Bluetooth devices.</string>
     <string name="devices_show_headphones">Show Bluetooth devices</string>
     <!-- A device's row in the menu: "85% · Charging" (%1$s is the level), or "Level unknown" for a battery that doesn't say. -->

@@ -1,6 +1,6 @@
 # How BentoBar works (this fork)
 
-The details behind [the README](README.md): what this fork adds and how it behaves, what root adds, the interfaces
+The details behind [the README](README.md): what this fork adds and how it behaves, what root and Shizuku add, the interfaces
 for other apps, and how to build it. For what BentoBar reads and sends, see [Privacy in full](#privacy-in-full).
 
 ## What this fork adds
@@ -190,13 +190,13 @@ Storage menus), BentoBar reads how much data and storage each app uses, to list 
 those menus, and nothing else. Android's switch also covers which apps you use and when; BentoBar
 doesn't read that. Turn it off any time in Android's Usage access settings (Setup › Usage access ›
 Open setting takes you there).
-Android doesn't share other apps' CPU or memory use with apps at all, so without root the CPU and Memory menus
+Android doesn't share other apps' CPU or memory use with apps at all, so without root or Shizuku the CPU and Memory menus
 show the whole system instead.
 
-**Root is optional.** On a rooted device, and only if you allow BentoBar when your root manager asks, BentoBar reads
-what's listed under [Root](#root): temperatures, the apps using the CPU and memory, the battery's real cycles and
-health, and a Galaxy watch's or earbuds' levels. It reads only while the menu that shows it is open, changes nothing,
-and keeps and sends none of it.
+**Root or Shizuku is optional.** If Shizuku is running and allowed, or on a rooted device when you allow BentoBar in your
+root manager, BentoBar reads what's listed under [Root and Shizuku](#root-and-shizuku): temperatures, the apps using the
+CPU and memory, the battery's real cycles and health, and a Galaxy watch's or earbuds' levels. It reads only while the
+menu that shows it is open (or when refreshed for the widget/providers), changes nothing, and keeps and sends none of it.
 
 **Sharing the bar's items with other apps is off by default.** If you turn on **Look › Other apps**, an app can read
 what the bar shows (each item's icon and words, which can be a track's title or a meeting's name), open an item's
@@ -215,28 +215,34 @@ switch off stops every app at once.
 | Internet | Weather and Air quality (Open-Meteo), Exchange rates (Frankfurter), Flight (AirLabs) and US stocks (Finnhub), only after you set them up; this fork's update check (GitHub); nothing else |
 | Install apps *(asked when you first update from inside BentoBar)* | installing this fork's own update, which Android asks you to confirm |
 | Notification access *(optional)* | Now playing's title, artist and artwork; BentoBar receives no notifications |
-| Root *(optional, asked by your root manager)* | the readings under [Root](#root); nothing is changed |
+| Shizuku *(optional, asked in Setup via Shizuku)* | preferred when running for [Root and Shizuku](#root-and-shizuku); ADB mode (`uid 2000`) covers top apps, ear sides and companion batteries |
+| Root *(optional, asked by your root manager)* | fallback for the readings under [Root and Shizuku](#root-and-shizuku), and UID 0 hardware/protected reads where Shizuku uses ADB; nothing is changed |
 | Network state, launcher apps | the network menu, and picking apps for shortcuts |
 
 BentoBar also defines two permissions for other apps, *read device batteries from BentoBar* and *read the bar's
 items from BentoBar*: see [Device batteries in your app](#device-batteries-in-your-app) and
 [The bar's items in your app](#the-bars-items-in-your-app).
 
-## Root
+## Root and Shizuku
 
-BentoBar works fully without root. On a **rooted** device it can also show what Android keeps from ordinary apps:
+BentoBar works fully without root or Shizuku. With **Shizuku** or on a **rooted** device it can also show what Android keeps from ordinary apps:
 
-| Where | What root adds | Why it helps |
+| Where | What root or Shizuku adds | Why it helps |
 |---|---|---|
 | **CPU menu** | the **CPU's and GPU's temperatures**, and **which apps use the CPU** most (yours, or yours and the system's) | see what's heating the device or draining the battery |
 | **Memory menu** | **which apps hold the most memory** | find what fills the RAM before the system starts closing apps |
 | **Battery menu** | the battery's **real charge-cycle count** and its **health in percent** | Android reports 0 cycles to apps; this is the battery's actual wear |
 | **Device batteries** | a **Galaxy watch's, ring's and earbuds'** levels from Samsung's own device list | the same levels One UI's battery widget shows, including each earbud and the case |
 
-How it asks: through `su`, only while the menu that shows it is open (the apps using the CPU every 3 seconds), and
-only reading, never changing anything. Where root is refused or missing, those rows just don't show, and BentoBar
-doesn't ask again until it restarts. Nothing root reads is kept or logged. The apps lists are set by the CPU item's
-**Apps using the CPU** and the Memory item's **Apps using memory** (Off, Apps, Apps and system).
+How it asks: when **Shizuku** is running and allowed (or enabled in **Setup › Shizuku**), BentoBar prefers an isolated
+read-only Shizuku `UserService` over spawning `su` for each poll. If Shizuku is running with root (`uid 0`), it covers
+all of the rows above; if Shizuku is running via ADB (`uid 2000`), it covers per-app CPU/memory processes, Bluetooth
+ear sides, and Samsung companion batteries, while BentoBar automatically falls back to `su` where available for
+root-only thermal/battery-wear nodes. It reads only while the menu that shows it is open (the apps using the CPU every 3
+seconds) or when the home screen widget refreshes, and only reading, never changing anything. Where both Shizuku and
+root are refused or missing, those rows just don't show (BentoBar resumes Shizuku automatically as soon as Shizuku is
+started or allowed). Nothing read is kept or logged. The apps lists are set by the CPU item's **Apps using the CPU**
+and the Memory item's **Apps using memory** (Off, Apps, Apps and system).
 
 ## Good to know
 

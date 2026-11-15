@@ -2,7 +2,8 @@
 
 ## 2.2.1-notch.1 (2026-11-15)
 
-- **Merged upstream BentoBar 2.1.0–2.2.1** (Left/Middle/Right strip areas, rebuilt Settings UI, remove deletes with Undo, 16 new items, real CPU load counters, Network menu addresses/gateway/DNS) while keeping all fork features (external-display taskbar bar, glass blur controls, One UI icon/font/widget styling, root hardware sensors/process lists, live/battery/item providers, home screen widget, and in-app GitHub updates).
+- **Added optional Shizuku support** (`moe.shizuku.manager.permission.API_V23`) alongside `su` root fallback: BentoBar prefers an isolated read-only Shizuku `UserService` when Shizuku is running and allowed (supporting both ADB `uid 2000` and root `uid 0` Shizuku servers), falls back to `su` where unavailable or where `uid 0` access is required, adds a live **Setup › Shizuku** status/Allow/Open row, and credits Shizuku API (Apache 2.0) in About.
+- **Merged upstream BentoBar 2.1.0–2.2.1** (Left/Middle/Right strip areas, rebuilt Settings UI, remove deletes with Undo, 16 new items, real CPU load counters, Network menu addresses/gateway/DNS) while keeping all fork features (external-display taskbar bar, glass blur controls, One UI icon/font/widget styling, root/Shizuku hardware sensors/process lists, live/battery/item providers, home screen widget, and in-app GitHub updates).
 
 ## Unreleased (fork)
 

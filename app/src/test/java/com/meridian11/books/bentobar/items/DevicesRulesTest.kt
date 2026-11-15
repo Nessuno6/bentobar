@@ -477,7 +477,7 @@ class DevicesRulesTest {
             "devices_level_charging" to "%1\$s · Charging",
             "devices_unknown" to "Level unknown",
             "devices_note" to "Mice, keyboards, styluses, game controllers, headphones and watches that report their battery level, " +
-                "connected directly or over Bluetooth. A Galaxy watch's level needs root.",
+                "connected directly or over Bluetooth. A Galaxy watch's level needs root or Shizuku.",
             "devices_note_no_headphones" to "Mice, keyboards, styluses and game controllers that tell Android their battery level. " +
                 "Headphones, and Bluetooth devices that report only over Bluetooth, need permission to see your Bluetooth devices.",
             "devices_show_headphones" to "Show Bluetooth devices",

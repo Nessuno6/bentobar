@@ -12,6 +12,8 @@ import com.meridian11.books.bentobar.items.Accesses
 import com.meridian11.books.bentobar.items.Env
 import com.meridian11.books.bentobar.items.MediaAccess
 import com.meridian11.books.bentobar.items.Notify
+import com.meridian11.books.bentobar.items.Priv
+import com.meridian11.books.bentobar.items.PrivRules
 import com.meridian11.books.bentobar.items.Usage
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -34,6 +36,10 @@ data class SetupState(
     val sideloaded: Boolean = false,
     /** The accesses the newer items need ([com.meridian11.books.bentobar.items.ItemType.needs]) that Android has given. */
     val access: Set<Access> = emptySet(),
+    /** Optional: Shizuku elevated read access (alternative to root). */
+    val shizuku: PrivRules.ShizukuStatus = PrivRules.ShizukuStatus.NOT_INSTALLED,
+    /** UID of the running Shizuku server (0 for root, 2000 for ADB shell) while [shizuku] is granted. */
+    val shizukuUid: Int? = null,
 )
 
 /**
@@ -64,6 +70,8 @@ object Setup {
             location = app.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED,
             sideloaded = Env.sideloaded(),
             access = Access.entries.filter { Accesses.granted(app, it) }.toSet(),
+            shizuku = Priv.status(app),
+            shizukuUid = Priv.shizukuUid(),
         )
         // A running timer's alarm, and a Focus session's, is exact only while exact alarms are allowed and used: follow a change.
         if (state.value.exactAlarms != before.exactAlarms) {

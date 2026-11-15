@@ -43,6 +43,8 @@ import com.meridian11.books.bentobar.items.Env
 import com.meridian11.books.bentobar.items.ItemType
 import com.meridian11.books.bentobar.items.Items
 import com.meridian11.books.bentobar.items.MediaAccess
+import com.meridian11.books.bentobar.items.Priv
+import com.meridian11.books.bentobar.items.PrivRules
 import com.meridian11.books.bentobar.items.Ticker
 import com.meridian11.books.bentobar.items.Usage
 import com.meridian11.books.bentobar.util.Sym
@@ -152,6 +154,8 @@ fun SetupPage(setup: SetupState, declined: Boolean, wontAsk: Set<String>, types:
                     appInfo = if (sideGuarded) ({ MainActivity.openAppInfo(activity) }) else null)
                 if (access == Access.CAMERA && !given && Manifest.permission.CAMERA in wontAsk) WontAsk(activity)
             }
+            RowLine()
+            ShizukuRow(activity, setup.shizuku, setup.shizukuUid, running)
         }
 
         // Observed where it is kept: an item's menu can change it while this page is open.
@@ -290,6 +294,48 @@ private fun Permission(tag: String, name: String, help: String, allowed: Boolean
 private fun WontAsk(activity: Activity) {
     NoticeLine(stringResource(R.string.setup_denied_settings), Modifier.padding(bottom = Space.m).testTag("wont-ask")) {
         BentoButton(stringResource(R.string.common_open_settings), { MainActivity.openAppInfo(activity) }, kind = ButtonKind.WARN)
+    }
+}
+
+/** Optional Shizuku row in Setup: status ("Allowed", "Not installed", etc.) and Allow / Open Shizuku action. */
+@Composable
+private fun ShizukuRow(activity: Activity, status: PrivRules.ShizukuStatus, uid: Int?, prominent: Boolean) {
+    val name = stringResource(R.string.setup_shizuku_title)
+    val open = stringResource(R.string.setup_shizuku_open)
+    val help = when (status) {
+        PrivRules.ShizukuStatus.GRANTED ->
+            stringResource(if (uid == 0) R.string.setup_shizuku_granted_root else R.string.setup_shizuku_granted_adb)
+        PrivRules.ShizukuStatus.NOT_RUNNING -> stringResource(R.string.setup_shizuku_not_running)
+        PrivRules.ShizukuStatus.PRE_V11 -> stringResource(R.string.setup_shizuku_pre_v11)
+        PrivRules.ShizukuStatus.NEEDS_PERMISSION, PrivRules.ShizukuStatus.NOT_INSTALLED ->
+            stringResource(R.string.setup_shizuku_text)
+    }
+    SettingRow(name, Modifier.testTag("permission:shizuku"), help) {
+        when (status) {
+            PrivRules.ShizukuStatus.GRANTED -> {
+                Good(stringResource(R.string.setup_allowed))
+                Spacer(Modifier.width(Space.xs))
+                val label = stringResource(R.string.setup_action_for, open, name)
+                BentoButton(open, { Priv.openShizuku(activity) }, Modifier.semantics { contentDescription = label }, kind = ButtonKind.QUIET)
+            }
+            PrivRules.ShizukuStatus.NEEDS_PERMISSION -> {
+                val allow = stringResource(R.string.common_allow)
+                val label = stringResource(R.string.setup_action_for, allow, name)
+                if (Priv.shouldShowRationale()) {
+                    val openLabel = stringResource(R.string.setup_action_for, open, name)
+                    BentoButton(open, { Priv.openShizuku(activity) }, Modifier.semantics { contentDescription = openLabel }, kind = ButtonKind.QUIET)
+                }
+                BentoButton(allow, { Priv.requestPermission() }, Modifier.semantics { contentDescription = label },
+                    kind = if (prominent) ButtonKind.TONAL else ButtonKind.TEXT)
+            }
+            PrivRules.ShizukuStatus.NOT_RUNNING, PrivRules.ShizukuStatus.PRE_V11 -> {
+                val label = stringResource(R.string.setup_action_for, open, name)
+                BentoButton(open, { Priv.openShizuku(activity) }, Modifier.semantics { contentDescription = label }, kind = ButtonKind.QUIET)
+            }
+            PrivRules.ShizukuStatus.NOT_INSTALLED -> {
+                Text(stringResource(R.string.setup_shizuku_not_installed), style = Bento.type.small, color = Bento.colors.ink3)
+            }
+        }
     }
 }
 

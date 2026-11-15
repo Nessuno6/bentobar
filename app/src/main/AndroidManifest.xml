@@ -39,6 +39,8 @@
     <uses-permission
         android:name="android.permission.WRITE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
+    <!-- Optional Shizuku access for reading hardware/process/Bluetooth details without root; read-only. -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <!-- The app picker for app shortcuts and folders lists launchable apps only. -->
     <queries>
@@ -48,6 +50,8 @@
         </intent>
         <!-- The Googlebook's Feedback app, for the Shortcut item's Report a bug: offered only where it is. -->
         <package android:name="com.google.android.desktop.feedback" />
+        <!-- Shizuku manager app, so Setup can show whether it's installed and launch it. -->
+        <package android:name="moe.shizuku.manager" />
     </queries>
 
     <!-- Google Play offers BentoBar only to devices that say they are a PC: Googlebooks and other
@@ -363,6 +367,14 @@
             android:exported="true"
             android:readPermission="com.meridian11.books.bentobar.permission.READ_BAR_ITEMS"
             android:writePermission="com.meridian11.books.bentobar.permission.READ_BAR_ITEMS" />
+        <!-- Shizuku binder handshake provider (dev.rikka.shizuku:provider). -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <!-- Pulled in transitively by crossdevice/nearby; BentoBar never uses exposure notifications. -->
         <service

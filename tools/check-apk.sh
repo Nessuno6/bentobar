@@ -24,7 +24,7 @@ if grep -E '\.util\.|DebugReceiver|BarFlipActivity|PreviewActivity|ComponentActi
 fi
 
 # Permissions: the set ManifestTest pins, plus the one AndroidX adds for receivers registered in code.
-WANT=$(sed -n '/fun thePermissionsAreTheseAndNoOthers/,/toSet()/p' app/src/test/java/com/meridian11/books/bentobar/ManifestTest.kt | grep -o 'android\.permission\.[A-Z_]*' | sort -u)
+WANT=$(sed -n '/fun thePermissionsAreTheseAndNoOthers/,/toSet()/p' app/src/test/java/com/meridian11/books/bentobar/ManifestTest.kt | grep -oE '(android\.permission|moe\.shizuku\.manager\.permission)\.[A-Z0-9_]*' | sort -u)
 test "$(wc -l <<< "$WANT")" -ge 5 || { echo "::error::could not read the permissions from ManifestTest.kt"; exit 1; }
 HAVE=$(awk '/^ *E: uses-permission/ { p = 1; next } p && /:name\(/ { sub(/.*="/, ""); sub(/".*/, ""); print; p = 0 }' "$TREE" | grep -v '\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION$' | sort -u)
 if [ "$WANT" != "$HAVE" ]; then

@@ -65,6 +65,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true
     }
 }
 
@@ -86,6 +87,9 @@ dependencies {
     // Device batteries' link between two of the user's devices (items/Link): Google's Cross device SDK (developer preview).
     implementation("com.google.ambient.crossdevice:crossdevice:0.1.0-preview01")
     implementation("com.google.android.gms:play-services-dtdi:16.0.0-beta01")
+    // Optional elevated reads without root via Shizuku (items/RootAccess + ShizukuService).
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
     testImplementation(libs.junit)
     // The Compose tests alone (see the build type): Robolectric hosts the composables on the JVM, ui-test drives them, and
     // ui-test-manifest declares the empty activity they are set into.
