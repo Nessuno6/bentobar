@@ -172,7 +172,7 @@ internal object BarRules {
                 if (n.depth <= 6 && n.id.isNotEmpty()) names.append(n.id.substringAfterLast('/')).append(' ')
             }
         }
-        val free = spacer?.takeIf { it.width() > 0 }?.let { clear(it, holes) } ?: widestGap(bar, parts + holes, inner = holes.isNotEmpty() && parts.isNotEmpty())
+        val free = spacer?.takeIf { it.width() > 0 }?.let { clear(it, holes) } ?: widestGap(bar, parts + holes, inner = holes.isNotEmpty())
         return BarSnapshot(windowId, bar, free, clock, names.toString().trim(), spacer, cap(bar, parts, holes))
     }
 
@@ -382,20 +382,29 @@ internal object BarRules {
         if (holes.none { it.intersects(area) }) area else widestGap(area, holes.filter { it.intersects(area) })
 
     /**
-     * The widest horizontal stretch of the bar that no item covers. With [inner], only stretches between two items: a
-     * phone's bar keeps its ends for the screen's rounded corners and its chips, whose nodes can start after their own
-     * icon (a call chip's from x 137 where its pill starts at 50), so the stretch before the first item is no room.
+     * The widest horizontal stretch of the bar that no item covers; on a phone's bar ([inner]) the leftmost that holds a
+     * strip. With [inner], the outermost bar's
+     * height at each end is no room: the screen's rounded corners are there, and a chip whose node starts after its own
+     * icon (a call chip's from x 137 where its pill starts at 50). Only that much: with nothing on that side of the
+     * camera, the stretch up to it is the bar's room.
      */
     private fun widestGap(bar: Box, parts: List<Box>, inner: Boolean = false): Box {
         val spans = parts.map { it.left to it.right }.sortedBy { it.first }
-        if (inner && spans.isEmpty()) return Box(bar.left, bar.top, bar.left, bar.bottom)
-        var best = Box(bar.left, bar.top, bar.left, bar.bottom)
-        var cursor = if (inner) spans.first().second else bar.left
+        val start = if (inner) bar.left + bar.height() else bar.left
+        val end = if (inner) bar.right - bar.height() else bar.right
+        var best = Box(start, bar.top, start, bar.bottom)
+        val gaps = ArrayList<Box>()
+        var cursor = start
         for ((l, r) in spans) {
-            if (l > cursor && l - cursor > best.width()) best = Box(cursor, bar.top, l, bar.bottom)
+            val to = minOf(l, end)
+            if (to > cursor) gaps += Box(cursor, bar.top, to, bar.bottom)
             cursor = maxOf(cursor, r)
         }
-        if (!inner && bar.right - cursor > best.width()) best = Box(cursor, bar.top, bar.right, bar.bottom)
+        if (end > cursor) gaps += Box(cursor, bar.top, end, bar.bottom)
+        // A phone's strip stands in the leftmost stretch that holds it (a ‹ and its ends, with the gaps to its edges: about
+        // 1.6 bar heights), next to what the bar shows at its left; the widest stretch only when none does.
+        if (inner) gaps.firstOrNull { it.width() >= bar.height() * 8 / 5 }?.let { return it }
+        for (g in gaps) if (g.width() > best.width()) best = g
         return best
     }
 }

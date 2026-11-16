@@ -98,6 +98,9 @@ class StatusBarScanTest {
         fun at(id: String, l: Int, r: Int) = BarNode(id, Box(l, 0, r, 128), 1, "", described = true)
         val tree = listOf(BarNode("", phone, 0, children = 4), at("chip", 137, 470), at("notificationIcons", 480, 610), at("system_icons", 880, 1400))
         assertEquals(Box(755, 0, 880, 128), BarRules.parse(7, phone, tree, listOf(Box(685, 0, 755, 128))).free)
+        // Nothing left of the camera: the room is all of it, but the corner (one bar's height).
+        val bare = listOf(BarNode("", phone, 0, children = 2), at("system_icons", 880, 1400))
+        assertEquals(Box(128, 0, 685, 128), BarRules.parse(7, phone, bare, listOf(Box(685, 0, 755, 128))).free)
     }
 
     @Test fun aPhoneShowsThreeItemsAndOneBesideTheNowBar() {
@@ -110,6 +113,18 @@ class StatusBarScanTest {
         assertEquals(1, BarRules.parse(7, phone, icons + at("chip", 137, 470), hole).cap)
         // No camera in the bar: no limit (a Googlebook, a tablet).
         assertNull(BarRules.parse(7, phone, icons + at("chip", 137, 470)).cap)
+    }
+
+    @Test fun onAPhoneTheStripTakesTheLeftmostRoomThatHoldsIt() {
+        val phone = Box(0, 0, 1440, 128)
+        fun at(id: String, l: Int, r: Int) = BarNode(id, Box(l, 0, r, 128), 1, "", described = true)
+        val hole = listOf(Box(685, 0, 755, 128))
+        // Icons at the left, then 230 px free, the camera, and a wider stretch right of it: the left one.
+        val tree = listOf(BarNode("", phone, 0, children = 3), at("notificationIcons", 128, 455), at("system_icons", 1200, 1400))
+        assertEquals(Box(455, 0, 685, 128), BarRules.parse(7, phone, tree, hole).free)
+        // Too little left of the camera (75 px): the widest stretch, right of it.
+        val full = listOf(BarNode("", phone, 0, children = 3), at("notificationIcons", 128, 610), at("system_icons", 900, 1400))
+        assertEquals(Box(755, 0, 900, 128), BarRules.parse(7, phone, full, hole).free)
     }
 
     @Test fun aNodeAsWideAsTheBarIsNoItem() {

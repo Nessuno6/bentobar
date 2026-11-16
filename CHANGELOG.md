@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.1-notch.5 (2026-11-16)
+
+- **Phone bar room (`BarRules.widestGap`):** on bars with a cutout only one bar height at each end is kept clear (rounded corners, a chip's own icon), instead of everything before the first item, which lost the whole left side when it was empty; the strip takes the leftmost free stretch that holds it (1.6 bar heights), the widest only when none does.
+
 ## 2.2.1-notch.4 (2026-11-16)
 
 - **Phone bar around the camera cutout (`BarRules` / `StatusBarScan`):** the display cutout counts as an obstruction when finding free room, so the strip never stands over the camera; on bars with a cutout the stretches before the first and after the last status bar item are not room.
