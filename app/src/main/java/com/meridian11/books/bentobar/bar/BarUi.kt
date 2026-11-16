@@ -263,6 +263,8 @@ fun Strip(
     maxItems: Int = Int.MAX_VALUE,
     /** The fewest it keeps, room or not: the strip is then wider than its room (a phone's bar beside the Now Bar). */
     atLeast: Int = 0,
+    /** The pill's corner radius in px, parallel to the screen's corner (a phone's bar); negative: a capsule's round ends. */
+    cornerPx: Float = -1f,
 ) {
     val pillBg = when (look.pill) {
         Pill.NONE -> Color.Transparent
@@ -339,7 +341,7 @@ fun Strip(
                 }
             }
             .padding(vertical = STRIP_PILL_INSET)
-            .clip(RoundedCornerShape(50))
+            .clip(if (cornerPx >= 0f) RoundedCornerShape(cornerPx) else RoundedCornerShape(50))
             .background(pillBg)
             // Over the strip's own pill and under every item (an alert's red capsule is drawn over it). Its place is
             // read here, at draw time, so a frame of its way draws it again and recomposes nothing.

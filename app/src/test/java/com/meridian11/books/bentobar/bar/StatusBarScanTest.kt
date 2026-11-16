@@ -101,6 +101,8 @@ class StatusBarScanTest {
         // Nothing left of the camera: the room is all of it, but the corner (one bar's height).
         val bare = listOf(BarNode("", phone, 0, children = 2), at("system_icons", 880, 1400))
         assertEquals(Box(128, 0, 685, 128), BarRules.parse(7, phone, bare, listOf(Box(685, 0, 755, 128))).free)
+        // With the screen's corner given (56 px, less the strip's 22 px gap), only that much is kept clear.
+        assertEquals(Box(34, 0, 685, 128), BarRules.parse(7, phone, bare, listOf(Box(685, 0, 755, 128)), edge = 34).free)
     }
 
     @Test fun aPhoneShowsThreeItemsAndOneBesideTheNowBar() {

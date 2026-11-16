@@ -30,6 +30,10 @@ object StatusBarScan {
     fun cutouts(display: android.view.Display?): List<Box> =
         runCatching { display?.cutout?.boundingRects?.map { it.box() } }.getOrNull().orEmpty().filter { it.width() > 0 && it.height() > 0 }
 
+    /** The radius of the display's top-left rounded corner, in px; null where the display doesn't say. */
+    fun corner(display: android.view.Display?): Int? =
+        runCatching { display?.getRoundedCorner(android.view.RoundedCorner.POSITION_TOP_LEFT)?.radius }.getOrNull()?.takeIf { it > 0 }
+
     /** What a scan brings back: the plain [snapshot], and the live spacer node (a cheap "did anything move?" check for [BarController]). */
     class Scanned(val snapshot: BarSnapshot, val spacerNode: AccessibilityNodeInfo?)
 
@@ -45,10 +49,11 @@ object StatusBarScan {
     }
 
     /** [cutouts]: the display's cutouts, in screen pixels (`BarRules.parse`). */
-    fun scan(w: AccessibilityWindowInfo, cutouts: List<Box> = emptyList()): Scanned {
+    /** [edge]: what each end of a phone's bar keeps clear, in px (`BarRules.parse`); null for one bar height. */
+    fun scan(w: AccessibilityWindowInfo, cutouts: List<Box> = emptyList(), edge: Int? = null): Scanned {
         val bar = Rect().also { w.getBoundsInScreen(it) }.box()
         // One round trip: prefetch the (small, ~35 node) tree instead of an IPC per getChild().
-        val root = root(w) ?: return Scanned(BarRules.parse(w.id, bar, emptyList(), cutouts), null)
+        val root = root(w) ?: return Scanned(BarRules.parse(w.id, bar, emptyList(), cutouts, edge), null)
         var spacerNode: AccessibilityNodeInfo? = null
         val nodes = ArrayList<BarNode>()
         val stack = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
@@ -61,7 +66,7 @@ object StatusBarScan {
                 described = !n.contentDescription.isNullOrEmpty(), clickable = n.isClickable, children = n.childCount)
             for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.add(it to depth + 1) }
         }
-        return Scanned(BarRules.parse(w.id, bar, nodes, cutouts), spacerNode)
+        return Scanned(BarRules.parse(w.id, bar, nodes, cutouts, edge), spacerNode)
     }
 
     /**

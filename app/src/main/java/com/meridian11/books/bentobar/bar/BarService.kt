@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -575,8 +576,7 @@ class BarController(private val service: AccessibilityService, val displayId: In
                 service.clearCache()
                 val scanned = runCatching {
                     if (desk) StatusBarScan.scanTaskbar(windows[listed.indexOf(barFact)])
-                    else StatusBarScan.scan(windows[listed.indexOf(barFact)],
-                        StatusBarScan.cutouts(service.getSystemService(android.hardware.display.DisplayManager::class.java)?.getDisplay(displayId)))
+                    else StatusBarScan.scan(windows[listed.indexOf(barFact)], cutouts(), phoneEdge())
                 }
                     .onFailure { Log.w(tag, "scan failed", it) }.getOrNull()
                 // A reading kept from before has no node (a scan without a tree brought none).
@@ -585,6 +585,10 @@ class BarController(private val service: AccessibilityService, val displayId: In
             }
         }
         if (s == null) spacerNode = null
+        if (s != null && s.summary != BarRules.NO_TREE) {
+            val corner = if (s.cap != null) StatusBarScan.corner(display())?.let { (it - pillInset()).coerceAtLeast(0).toFloat() } else null
+            pillCorner.floatValue = corner ?: -1f
+        }
         snap = s
         // A phone's bar holds the strip to a few items, fewer beside the Now Bar's chip (BarRules.cap).
         // A reading with no tree knows nothing of the chip: the last limit stands.
@@ -785,6 +789,7 @@ class BarController(private val service: AccessibilityService, val displayId: In
                 onReach = { reach.intValue = it },
                 maxItems = if (desk) Int.MAX_VALUE else itemCap.value ?: Int.MAX_VALUE,
                 atLeast = if (besideChip) 1 else 0,
+                cornerPx = if (desk) -1f else pillCorner.floatValue,
             )
         }
     }
@@ -827,6 +832,25 @@ class BarController(private val service: AccessibilityService, val displayId: In
 
     private var dragFrom: Drag? = null
     private var dragCenters: Map<String, Float> = emptyMap()
+    private fun display() = service.getSystemService(android.hardware.display.DisplayManager::class.java)?.getDisplay(displayId)
+    private fun cutouts() = StatusBarScan.cutouts(display())
+
+    /** The pill's gap to the bar's top and bottom, in px. */
+    private fun pillInset() = (STRIP_PILL_INSET.value * density).toInt()
+
+    /**
+     * Where a phone's bar starts its room, in px from each end (`BarRules.parse`'s edge): so far in that the pill's gap to
+     * the screen's side is its gap to the top, tucked into the rounded corner; the strip keeps 6 dp to its room's edges,
+     * so this is less than nothing. Null where the display has no rounded corner (one bar height then).
+     */
+    private fun phoneEdge(): Int? = StatusBarScan.corner(display())?.let { pillInset() - (6 * density).toInt() }
+
+    /**
+     * The pill's corner radius in px on a phone's bar: the screen's corner less the pill's gap to it, so that the pill's
+     * curve runs parallel to the screen's. Negative: the round ends of a capsule (any other bar).
+     */
+    private val pillCorner = mutableFloatStateOf(-1f)
+
     /** The most items a strip shows on this bar ([BarSnapshot.cap]); null: as many as have room. */
     private val itemCap = mutableStateOf<Int?>(null)
 
@@ -849,6 +873,14 @@ class BarController(private val service: AccessibilityService, val displayId: In
         override fun placed(id: String, at: Rect) { placed[id] = at }
 
         override fun gone(id: String) { placed -= id }
+
+        /**
+         * An item fades in only in a strip already on screen. One composed while the window is still invisible (just
+         * shown and not measured yet, or empty) starts whole: its fade's first frame was drawn, transparent, as the window
+         * turned visible, and on a phone the frames after it waited for the next input, so the strip stood as an empty
+         * pill until a tap (seen after the bar hid and came back as a charger went in).
+         */
+        override val appearing: Boolean get() = !strip.pending && !strip.empty
 
         override fun click(item: ItemConfig, at: Rect) {
             placed[item.id] = at

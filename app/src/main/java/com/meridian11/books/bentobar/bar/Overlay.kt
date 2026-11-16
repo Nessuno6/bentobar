@@ -98,7 +98,13 @@ class Overlay(
      * show the window at all, while its content is still laid out (so it can report when it has
      * something to draw again).
      */
-    fun setContentVisible(visible: Boolean) { root?.visibility = if (visible) android.view.View.VISIBLE else android.view.View.INVISIBLE }
+    fun setContentVisible(visible: Boolean) {
+        val r = root ?: return
+        val was = r.visibility == android.view.View.VISIBLE
+        r.visibility = if (visible) android.view.View.VISIBLE else android.view.View.INVISIBLE
+        // Turning visible, everything in it is drawn anew: what changed while it was hidden must not wait for an input.
+        if (visible && !was) { r.invalidate(); compose?.invalidate(); compose?.let { c -> (0 until c.childCount).forEach { c.getChildAt(it).invalidate() } } }
+    }
 
     /** What the window was last given: a [relayout] that changes nothing is skipped, or every look at the bar costs a layout pass. */
     private var applied: Placement? = null

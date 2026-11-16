@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.1-notch.6 (2026-11-16)
+
+- **Fixed the empty pill (`AreaEvents.appearing`, `Overlay.setContentVisible`):** items composed while their strip's window is still invisible (just shown, or empty) start whole instead of fading in, and a window turning visible is redrawn; after the bar hid and came back the fade could stop at its transparent first frame until an input.
+- **Phone pill in the corner (`BarRules.parse` edge, `StatusBarScan.corner`, `Strip(cornerPx)`):** on a bar with a cutout each end keeps clear only the screen's rounded corner, so the pill's gap to the side equals its gap to the top; its corner radius is the screen's less that gap.
+
 ## 2.2.1-notch.5 (2026-11-16)
 
 - **Phone bar room (`BarRules.widestGap`):** on bars with a cutout only one bar height at each end is kept clear (rounded corners, a chip's own icon), instead of everything before the first item, which lost the whole left side when it was empty; the strip takes the leftmost free stretch that holds it (1.6 bar heights), the widest only when none does.

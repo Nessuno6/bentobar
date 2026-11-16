@@ -155,7 +155,7 @@ internal object BarRules {
      * room around it empty, so the widest gap took it in and a strip landed on the camera, its icon behind the hole and
      * only its pill showing around it. A cutout takes room as an item does, and no free area reaches into one.
      */
-    fun parse(windowId: Int, bar: Box, nodes: List<BarNode>, cutouts: List<Box> = emptyList()): BarSnapshot {
+    fun parse(windowId: Int, bar: Box, nodes: List<BarNode>, cutouts: List<Box> = emptyList(), edge: Int? = null): BarSnapshot {
         val holes = cutouts.filter { it.intersects(bar) }
         if (nodes.isEmpty() || nodes.first().children == 0) return BarSnapshot(windowId, bar, clear(bar, holes), null, NO_TREE)
         var spacer: Box? = null
@@ -172,7 +172,7 @@ internal object BarRules {
                 if (n.depth <= 6 && n.id.isNotEmpty()) names.append(n.id.substringAfterLast('/')).append(' ')
             }
         }
-        val free = spacer?.takeIf { it.width() > 0 }?.let { clear(it, holes) } ?: widestGap(bar, parts + holes, inner = holes.isNotEmpty())
+        val free = spacer?.takeIf { it.width() > 0 }?.let { clear(it, holes) } ?: widestGap(bar, parts + holes, inner = holes.isNotEmpty(), edge = edge ?: bar.height())
         return BarSnapshot(windowId, bar, free, clock, names.toString().trim(), spacer, cap(bar, parts, holes))
     }
 
@@ -388,10 +388,12 @@ internal object BarRules {
      * icon (a call chip's from x 137 where its pill starts at 50). Only that much: with nothing on that side of the
      * camera, the stretch up to it is the bar's room.
      */
-    private fun widestGap(bar: Box, parts: List<Box>, inner: Boolean = false): Box {
+    private fun widestGap(bar: Box, parts: List<Box>, inner: Boolean = false, edge: Int = bar.height()): Box {
         val spans = parts.map { it.left to it.right }.sortedBy { it.first }
-        val start = if (inner) bar.left + bar.height() else bar.left
-        val end = if (inner) bar.right - bar.height() else bar.right
+        // [edge]: what each end keeps clear on a phone's bar, the screen's rounded corner (less the gap the strip keeps to
+        // its room's edges, so that the strip itself starts where the corner ends, in line with the system's own icons).
+        val start = if (inner) bar.left + edge else bar.left
+        val end = if (inner) bar.right - edge else bar.right
         var best = Box(start, bar.top, start, bar.bottom)
         val gaps = ArrayList<Box>()
         var cursor = start
