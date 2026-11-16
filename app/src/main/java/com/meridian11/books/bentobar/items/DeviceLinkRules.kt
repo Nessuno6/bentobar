@@ -64,6 +64,9 @@ object DeviceLinkRules {
     /** After Quick Share left the front and AWDL went down, the link waits this long: a send can go on in the background. */
     const val LINGER_MS = 60_000L
 
+    /** While not linked, Device batteries looks this often for the device last linked, to link back to it (`Link.follow`). */
+    const val FOLLOW_MS = 120_000L
+
     /** Whether the link gives way now: AWDL is up, or Quick Share is in front (null: no Usage access to tell). */
     fun givesWay(awdl: Boolean, quickShare: Boolean?): Boolean = awdl || quickShare == true
 

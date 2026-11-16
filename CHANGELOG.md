@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.1-notch.7 (2026-11-16)
+
+- **Pairing card (`ui/LinkCard`, `LinkActivity.showCard`, `Link.scan` / `Link.linkTo`):** BentoBar's own device list in place of Google's picker, a One UI card over the screen blurred behind it (`SemBlur` on Galaxy devices, Android's cross-window blur elsewhere, else a dim); "Other devices" and a scan that can't run open Google's picker.
+- **Links both ways (`Link.back`):** opening and accepting only register a side for the channel, so each side holds both an opened and an accepted connection on the same device and hears the other whichever side linked; a link opened from a scan (the card, "Link again") wakes nothing on the other side, whose messages Google Play services held.
+- **Link back (`Link.follow`, `DeviceLinkRules.FOLLOW_MS`):** while Device batteries is sampled and not linked, it looks for the device last linked at once and every 2 minutes (quietly) and links back; not after Unlink, nor while Quick Share or AWDL has the radio.
+- **Scan feature (`DiscoveryFeature.CROSS_DEVICE_SDK`):** both scans asked with 0 (`UNKNOWN`) and found nothing.
+
 ## 2.2.1-notch.6 (2026-11-16)
 
 - **Fixed the empty pill (`AreaEvents.appearing`, `Overlay.setContentVisible`):** items composed while their strip's window is still invisible (just shown, or empty) start whole instead of fading in, and a window turning visible is redrawn; after the bar hid and came back the fade could stop at its transparent first frame until an input.

@@ -15,5 +15,12 @@
     <string name="link_tile_off">Off</string>
     <string name="link_tile_connecting">Linking…</string>
     <string name="link_tile_paused">Paused for sharing</string>
+    <string name="link_card_title">Link a device</string>
+    <string name="link_card_note">Your phones and tablets with BentoBar, signed in to the same Google account</string>
+    <string name="link_card_searching">Looking for your devices…</string>
+    <string name="link_card_none">No devices found nearby</string>
+    <string name="link_card_linked">Linked</string>
+    <string name="link_card_other">Other devices</string>
+    <string name="link_card_cancel">Cancel</string>
     <string name="link_could_not_connect">Could not link to %1$s</string>
 </resources>

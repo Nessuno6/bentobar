@@ -153,7 +153,10 @@ object DevicesItem : ItemType("devices", R.string.item_devices_title, Sym.MOUSE,
         watch.clear()
     }
 
-    override fun sample(now: Long) { if (staged == null) watch.tick(now) }
+    override fun sample(now: Long) {
+        if (staged == null) watch.tick(now)
+        Link.follow(android.os.SystemClock.elapsedRealtime())
+    }
 
     /**
      * Every input device with what it says of its battery, as the devices to list. Background thread.
