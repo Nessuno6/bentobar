@@ -16,6 +16,9 @@
     <!-- Device batteries' headphones: the battery level connected Bluetooth audio devices report. Asked for only from that
          item's menu ("Show headphones"); without it the item lists input devices only, as before. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Device link's tile finds the device last linked with Google Play services' scan of your own devices, which asks
+         for it (Nearby devices, the same group as the line above). Never used to tell where the device is. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <!-- Weather's My location, asked for only when an item chooses it: approximate only, never precise, and no background-location permission: Android gives the bar's accessibility service the location under the "while using the app" grant (how Play reads that is decided with the 1.4 submission). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -207,6 +210,17 @@
             android:exported="true"
             android:icon="@drawable/sym_coffee"
             android:label="@string/tile_awake"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
+        </service>
+        <service
+            android:name=".tile.LinkTile"
+            android:exported="true"
+            android:icon="@drawable/sym_link"
+            android:label="@string/link_tile"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

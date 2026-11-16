@@ -29,7 +29,9 @@ import kotlinx.coroutines.launch
  *
  * While linked, each side sends its battery and the devices it shows ([DeviceLinkRules]) at once and every half minute, and
  * shows what the other sent. The link lasts while both processes do: once it drops, Device batteries offers to link
- * again (the picker, one tap). Nothing is kept on the device, and no name is logged.
+ * again (the picker, one tap), and the Device link tile links again to the last device by itself ([autolink]). Of the link
+ * only that device's name is kept, in the no-backup directory (`Kept.own("link")`), so the tile can find it after
+ * BentoBar restarts; no name is logged.
  */
 object Link {
     /** What Google Play services start BentoBar with on the device picked (`ui/LinkActivity`). */
@@ -50,6 +52,11 @@ object Link {
 
     @Volatile private var attempt = 0
     private var connectTimeout: Runnable? = null
+
+    /** The device last linked to, picked here or accepted: what the link opens again after Quick Share or AWDL. */
+    private var opened: Participant? = null
+    /** The link gave way to AWDL ([DeviceLinkRules.awdl]) and, if this side opened it, opens again once AWDL ends. */
+    @Volatile private var yielded = false
 
     val linked: Boolean get() = connection?.isClosed == false
 
@@ -87,10 +94,75 @@ object Link {
     private const val DEVICE_0 = "com.google.android.gms.dtdi.core.extra.DEVICE_0"
 
     /** The user picked [participant]: open the link (Google wakes BentoBar there, which accepts). */
-    fun open(participant: Participant) = start(participant, notifyFailure = true) { participant.openConnection(CHANNEL) }
+    fun open(participant: Participant) {
+        opened = participant
+        yielded = false
+        start(participant, notifyFailure = true) { participant.openConnection(CHANNEL) }
+    }
 
-    /** Another device asked for a link (BentoBar was woken with [ACTION_WAKE]): accept it. */
-    fun accept(participant: Participant) = start(participant, notifyFailure = false) { participant.acceptConnection(CHANNEL) }
+    /** Another device asked for a link (BentoBar was woken with [ACTION_WAKE]): accept it, unless AWDL is up here. */
+    fun accept(participant: Participant) {
+        if (busy && SystemClock.elapsedRealtime() - busyAt < DeviceLinkRules.LINGER_MS) {
+            android.util.Log.i(TAG, "link refused: Quick Share or AWDL has the radio"); return
+        }
+        // Kept too: if Quick Share takes the radio here, this side asks the other again once it is done, since the other
+        // side never hears why the link dropped.
+        opened = participant
+        yielded = false
+        start(participant, notifyFailure = false) { participant.acceptConnection(CHANNEL) }
+    }
+
+    /** The names of the network interfaces that are up. Read without any permission; a failure reads as none. */
+    private fun upInterfaces(): List<String> = runCatching {
+        java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().filter { runCatching { it.isUp }.getOrDefault(false) }.map { it.name }
+    }.getOrDefault(emptyList())
+
+    private fun awdlUp() = DeviceLinkRules.awdl(upInterfaces())
+
+    /** What the last look found: something needs the radio (AWDL, or Quick Share in front), and when it last did. */
+    @Volatile private var busy = false
+    @Volatile private var busyAt = 0L
+    /** Looks are made here: listing interfaces and reading usage events are calls into the system, kept off the main thread. */
+    private val looker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "BentoBarLink").apply { isDaemon = true } }
+
+    /**
+     * Every [DeviceLinkRules.AWDL_EVERY_MS] while the link is open, opening or has given way: Quick Share in front or AWDL
+     * up (an AirDrop to an Apple device) drops the link at once, so the radio is Quick Share's. While it gave way, the side
+     * that opened the link opens it again a minute after both are gone; the other side waits to be asked.
+     */
+    private val awdlWatch = object : Runnable {
+        override fun run() {
+            main.removeCallbacks(this)
+            looker.execute {
+                val awdl = awdlUp()
+                val share = ScreenTimeLoad.inFront(Env.app, DeviceLinkRules.QUICK_SHARE)
+                main.post { decide(awdl, share) }
+            }
+        }
+    }
+
+    private fun decide(awdl: Boolean, share: Boolean?) {
+        val now = SystemClock.elapsedRealtime()
+        busy = DeviceLinkRules.givesWay(awdl, share)
+        if (busy) busyAt = now
+        when {
+            busy && (linked || connecting) -> {
+                android.util.Log.i(TAG, "${if (awdl) "AWDL is up" else "Quick Share is open"}: the link gives way")
+                drop()
+                yielded = true
+            }
+            yielded && DeviceLinkRules.relinks(busy, now - busyAt) -> {
+                yielded = false
+                opened?.let { participant ->
+                    android.util.Log.i(TAG, "Quick Share and AWDL are done: linking again")
+                    start(participant, notifyFailure = false) { participant.openConnection(CHANNEL) }
+                }
+            }
+        }
+        if (linked || connecting || yielded) main.postDelayed(awdlWatch, DeviceLinkRules.AWDL_EVERY_MS)
+    }
+
+    private fun watchAwdl() { main.removeCallbacks(awdlWatch); main.postDelayed(awdlWatch, DeviceLinkRules.AWDL_EVERY_MS) }
 
     private fun start(participant: Participant, notifyFailure: Boolean, how: suspend () -> Result<RemoteConnection>) {
         val id = ++attempt
@@ -101,13 +173,14 @@ object Link {
         val timeout = Runnable {
             if (id != attempt || !connecting) return@Runnable
             connecting = false
-            Ticker.refresh()
+            changed()
             android.util.Log.i(TAG, "link timed out")
             if (notifyFailure) showFailed(label)
         }
         connectTimeout = timeout
         main.postDelayed(timeout, DeviceLinkRules.CONNECT_TIMEOUT_MS)
-        Ticker.refresh()
+        watchAwdl()
+        changed()
         scope.launch {
             val result = runCatching { how() }.getOrElse { Result.failure(it) }
             main.post {
@@ -121,7 +194,7 @@ object Link {
                     if (notifyFailure) showFailed(label)
                 }
                 connecting = false
-                Ticker.refresh()
+                changed()
             }
         }
     }
@@ -136,6 +209,10 @@ object Link {
     }
 
     private fun use(c: RemoteConnection) {
+        peer?.takeIf { it.isNotBlank() }?.let { name ->
+            known = name
+            looker.execute { runCatching { com.meridian11.books.bentobar.data.Kept.own(KEPT).write(PEER_NAME, name, System.currentTimeMillis()) } }
+        }
         connection?.takeIf { it !== c }?.let { old -> runCatching { old.closeFuture() } }
         connection = c
         status = null
@@ -145,8 +222,102 @@ object Link {
         tick.run()
     }
 
-    /** Drops the link (Device batteries' Unlink). */
+    /**
+     * Drops the link (Device batteries' Unlink, the tile): it stays down until asked again, sharing or not. The device is
+     * remembered, so the tile links it again with one tap.
+     */
     fun unlink() {
+        yielded = false
+        main.removeCallbacks(awdlWatch)
+        drop()
+    }
+
+    /** Links again to the device last linked, without the picker (the tile). False when there is none to ask. */
+    fun relink(): Boolean {
+        val participant = opened ?: return false
+        if (linked || connecting) return true
+        yielded = false
+        start(participant, notifyFailure = true) { participant.openConnection(CHANNEL) }
+        return true
+    }
+
+    private const val KEPT = "link"
+    private const val PEER_NAME = "peer"
+    /** How long [autolink] looks for the last device before it gives up. */
+    private const val FIND_MS = 10_000L
+
+    /** The name of the device last linked, kept across restarts; null if none ever was. Read from its file once. */
+    private fun lastPeer(): String? = known ?: runCatching { com.meridian11.books.bentobar.data.Kept.own(KEPT).read(PEER_NAME)?.text }
+        .getOrNull()?.takeIf { it.isNotBlank() }?.also { known = it }
+    @Volatile private var known: String? = null
+
+    /** The device to link again to, for the menu's words: the one this process last saw, else the one kept. */
+    fun lastName(): String? = peer ?: lastPeer()
+
+    /**
+     * The tile's tap: links to the device last linked, with no picker. From memory while this process remembers it;
+     * after a restart, by looking for a device of the kept name among the user's own (Google Play services' scan,
+     * [FIND_MS] at most). [onMissing] runs on the main thread when there is no such device to ask: none was ever
+     * linked, or it wasn't found in time.
+     */
+    fun autolink(onMissing: () -> Unit) {
+        if (linked || connecting) return
+        if (relink()) return
+        val name = lastPeer() ?: return onMissing()
+        // The scan asks for Nearby devices (BLUETOOTH_SCAN), which the picker's first use asks the user for (LinkActivity).
+        if (!canScan()) return onMissing()
+        val client = runCatching { Dtdi.getClient(Env.app) }.getOrNull() ?: return onMissing()
+        val id = ++attempt
+        peer = name
+        connecting = true
+        changed()
+        var settled = false
+        val giveUp = Runnable {
+            if (settled) return@Runnable
+            settled = true
+            runCatching { client.stopDiscovery() }
+            if (id == attempt) { connecting = false; changed() }
+            android.util.Log.i(TAG, "autolink: last device not found")
+            onMissing()
+        }
+        main.postDelayed(giveUp, FIND_MS)
+        val listener = object : com.google.android.gms.dtdi.core.OnScanResultListener {
+            override fun onScanResult(result: com.google.android.gms.dtdi.core.ScanResult) {
+                val device = result.remoteDevices.firstOrNull { it.deviceName == name } ?: return
+                main.post {
+                    if (settled) return@post
+                    settled = true
+                    main.removeCallbacks(giveUp)
+                    runCatching { client.stopDiscovery() }
+                    if (id != attempt) return@post // unlinked meanwhile
+                    connecting = false
+                    android.util.Log.i(TAG, "autolink: found the last device")
+                    open(ParticipantImpl(device.deviceName, device.token, CorrelationData.createNew(), client))
+                }
+            }
+        }
+        runCatching {
+            @android.annotation.SuppressLint("MissingPermission") // canScan() above
+            val scan = client.startOrUpdateDiscovery(emptyList(), 0, listener)
+            scan
+                .addOnFailureListener { e -> android.util.Log.i(TAG, "autolink scan failed: ${e.javaClass.simpleName}"); main.post(giveUp) }
+        }.onFailure { main.post(giveUp) }
+    }
+
+    /** Whether the scan [autolink] needs is allowed: Nearby devices' BLUETOOTH_SCAN. */
+    fun canScan(): Boolean = Env.app.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    /** Gave way to Quick Share or AWDL, and will link again once they are done. */
+    val paused: Boolean get() = yielded && !linked && !connecting
+
+    /** The bar's items and the tile hear of every change of the link. */
+    private fun changed() {
+        Ticker.refresh()
+        com.meridian11.books.bentobar.tile.LinkTile.refresh(Env.app)
+    }
+
+    private fun drop() {
         attempt++
         clearConnectTimeout()
         connecting = false
@@ -154,7 +325,7 @@ object Link {
         connection?.let { c -> runCatching { c.closeFuture() } }
         connection = null
         status = null
-        Ticker.refresh()
+        changed()
     }
 
     private val tick = object : Runnable {
@@ -176,7 +347,7 @@ object Link {
                 if (got != status) com.meridian11.books.bentobar.widget.WidgetUpdater.changed()
                 status = got
                 statusAt = SystemClock.elapsedRealtime()
-                Ticker.refresh()
+                changed()
             }
         }
 
@@ -191,7 +362,7 @@ object Link {
         main.removeCallbacks(tick)
         connection = null
         status = null
-        Ticker.refresh()
+        changed()
     }
 
     /** This side's status: its own battery, its name and kind, and the devices Device batteries found here. */
@@ -217,7 +388,7 @@ object Link {
     /** The test hook: whether linked, and what the other side sent (kinds and levels, no names). */
     fun debugLine(): String {
         val s = status
-        return "linked=$linked connecting=$connecting peer=${peer != null} " +
+        return "linked=$linked connecting=$connecting busy=$busy yielded=$yielded peer=${peer != null} " +
             (s?.let { st -> (listOf(st.self) + st.devices).joinToString(" ") { "${it.kind.name.lowercase()}=${it.level ?: "?"}${if (it.charging) "c" else ""}" } } ?: "nothing")
     }
 }

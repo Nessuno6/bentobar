@@ -85,3 +85,44 @@ class TimerTile : TileService() {
         t.updateTile()
     }
 }
+
+/**
+ * Device batteries' link to your other device ([com.meridian11.books.bentobar.items.Link]), on either side: on while
+ * linked, a tap unlinks; off, a tap opens Google's device picker, to link any of your devices. (Device batteries' menu is
+ * the one tap that links again to the last device.)
+ */
+class LinkTile : TileService() {
+    override fun onStartListening() { Env.init(this); refresh() }
+
+    override fun onClick() {
+        Env.init(this)
+        val link = com.meridian11.books.bentobar.items.Link
+        when {
+            link.linked || link.connecting -> link.unlink()
+            else -> startActivityAndCollapse(PendingIntent.getActivity(this, 0,
+                Intent(this, com.meridian11.books.bentobar.ui.LinkActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_IMMUTABLE))
+        }
+        refresh()
+    }
+
+    private fun refresh() {
+        val t = qsTile ?: return
+        val link = com.meridian11.books.bentobar.items.Link
+        t.state = if (link.linked || link.connecting) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        t.subtitle = when {
+            link.linked -> link.peer ?: ""
+            link.connecting -> getString(R.string.link_tile_connecting)
+            link.paused -> getString(R.string.link_tile_paused)
+            else -> getString(R.string.link_tile_off)
+        }
+        t.updateTile()
+    }
+
+    companion object {
+        /** The link changed: the tile redraws if it is showing. */
+        fun refresh(context: android.content.Context) = runCatching {
+            requestListeningState(context, android.content.ComponentName(context, LinkTile::class.java))
+        }
+    }
+}

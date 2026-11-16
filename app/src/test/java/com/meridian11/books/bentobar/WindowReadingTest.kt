@@ -39,7 +39,9 @@ class WindowReadingTest {
         assertEquals("the one tree walk is in StatusBarScan.scan", listOf("bar/StatusBarScan.kt"), where("getRoot("))
         assertEquals("the scan has one caller, BarService.check", listOf("bar/BarService.kt"), where("StatusBarScan.scan("))
         assertTrue("check hands the scan the status bar's own window",
-            "StatusBarScan.scan(windows[listed.indexOf(barFact)])" in code(File("src/main/java/com/meridian11/books/bentobar/bar/BarService.kt")))
+            // Its second argument, the display's cutouts, is no window: where the camera hole is, from the display.
+            Regex("""StatusBarScan\.scan\(windows\[listed\.indexOf\(barFact\)\][,)]""")
+                .containsMatchIn(code(File("src/main/java/com/meridian11/books/bentobar/bar/BarService.kt"))))
         assertEquals("the one picture is of one window, by its id", listOf("bar/StatusBarScan.kt"), where("takeScreenshotOfWindow(s.windowId"))
         assertEquals("no picture of the whole screen", emptyList<String>(), where("takeScreenshot("))
     }

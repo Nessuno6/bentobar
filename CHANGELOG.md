@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.1-notch.4 (2026-11-16)
+
+- **Phone bar around the camera cutout (`BarRules` / `StatusBarScan`):** the display cutout counts as an obstruction when finding free room, so the strip never stands over the camera; on bars with a cutout the stretches before the first and after the last status bar item are not room.
+- **Item limit on phones (`BarSnapshot.cap`, `fitStrip`):** at most 3 items, 1 beside the Now Bar's chip (told by its width, as no node id is readable); that one item is kept even when wider than the room, with no ‹; a strip whose items were all dropped is not drawn as an empty pill.
+- **Two-digit slots (`Fmt.digitSlot`):** every number in an item's text holds at least two digits' width, so the bar re-places only when items come or go.
+- **Device link gives way to Quick Share (`Link`, `DeviceLinkRules`, `ScreenTimeLoad.inFront`):** drops while the share sheet or Quick Share is in front or an AWDL interface is up, and links again a minute after.
+- **Device link tile (`LinkTile`) and auto-link:** the tile opens the picker or unlinks; Device batteries' "Link to … again" finds the last device by its kept name through Google Play services' scan (`BLUETOOTH_SCAN`, never for location) and opens the picker only when it isn't found.
+
 ## 2.2.1-notch.3 (2026-11-15)
 
 - **Fixed crash when checking for updates (`Updates` / `Http` / `Online`):**

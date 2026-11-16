@@ -56,6 +56,11 @@ data class BarSnapshot(
     val summary: String,
     /** Where the spacer node was at the scan. It is [free] unless the spacer had no width left. */
     val spacer: Box? = null,
+    /**
+     * How many items the strip shows at most, on a phone's bar (one with a camera cutout): one beside the Now Bar's chip,
+     * three without it. Null elsewhere: a Googlebook's or a tablet's bar fits by room alone.
+     */
+    val cap: Int? = null,
 )
 
 /** What one look at the bar knows. The last look's reading and neighbours are facts too: nothing is remembered in here. */
@@ -145,9 +150,14 @@ internal object BarRules {
      * What the tree of the status bar window [windowId], at [bar], says about the bar. [nodes] are in the walk's order.
      * No nodes, or a root with no children (SystemUI mid-change), is no tree: its free area is unknown. A root with children
      * and nothing labelled under it is a tree, or a bar with no spacer would have no widest gap to fall back on.
+     *
+     * [cutouts] are the display's cutouts (a phone's camera hole): no node says where one is, and the bar leaves the
+     * room around it empty, so the widest gap took it in and a strip landed on the camera, its icon behind the hole and
+     * only its pill showing around it. A cutout takes room as an item does, and no free area reaches into one.
      */
-    fun parse(windowId: Int, bar: Box, nodes: List<BarNode>): BarSnapshot {
-        if (nodes.isEmpty() || nodes.first().children == 0) return BarSnapshot(windowId, bar, bar, null, NO_TREE)
+    fun parse(windowId: Int, bar: Box, nodes: List<BarNode>, cutouts: List<Box> = emptyList()): BarSnapshot {
+        val holes = cutouts.filter { it.intersects(bar) }
+        if (nodes.isEmpty() || nodes.first().children == 0) return BarSnapshot(windowId, bar, clear(bar, holes), null, NO_TREE)
         var spacer: Box? = null
         var clock: Box? = null
         val parts = ArrayList<Box>()
@@ -162,8 +172,8 @@ internal object BarRules {
                 if (n.depth <= 6 && n.id.isNotEmpty()) names.append(n.id.substringAfterLast('/')).append(' ')
             }
         }
-        val free = spacer?.takeIf { it.width() > 0 } ?: widestGap(bar, parts)
-        return BarSnapshot(windowId, bar, free, clock, names.toString().trim(), spacer)
+        val free = spacer?.takeIf { it.width() > 0 }?.let { clear(it, holes) } ?: widestGap(bar, parts + holes, inner = holes.isNotEmpty() && parts.isNotEmpty())
+        return BarSnapshot(windowId, bar, free, clock, names.toString().trim(), spacer, cap(bar, parts, holes))
     }
 
     /**
@@ -352,16 +362,40 @@ internal object BarRules {
         )
     }
 
-    /** The widest horizontal stretch of the bar that no item covers. */
-    private fun widestGap(bar: Box, parts: List<Box>): Box {
+    /** On a phone's bar, at most this many items: one while the Now Bar's chip is up, else three ([BarSnapshot.cap]). */
+    const val PHONE_ITEMS = 3
+    const val PHONE_ITEMS_BESIDE_CHIP = 1
+
+    /**
+     * [BarSnapshot.cap]. The Now Bar's chip (a call, a timer, media) is the one wide item left of the camera: its node
+     * names no id BentoBar can read on a Galaxy, so it is told by its width, at least twice the bar's height (a chip was
+     * 333 px on a 128 px bar, a notification icon about 50, all of them together 130).
+     */
+    internal fun cap(bar: Box, parts: List<Box>, holes: List<Box>): Int? {
+        val camera = holes.minByOrNull { it.left } ?: return null
+        val chip = parts.any { it.right <= camera.left && it.width() >= 2 * bar.height() }
+        return if (chip) PHONE_ITEMS_BESIDE_CHIP else PHONE_ITEMS
+    }
+
+    /** The widest stretch of [area] that none of [holes] covers ([area] itself when none lies in it). */
+    internal fun clear(area: Box, holes: List<Box>): Box =
+        if (holes.none { it.intersects(area) }) area else widestGap(area, holes.filter { it.intersects(area) })
+
+    /**
+     * The widest horizontal stretch of the bar that no item covers. With [inner], only stretches between two items: a
+     * phone's bar keeps its ends for the screen's rounded corners and its chips, whose nodes can start after their own
+     * icon (a call chip's from x 137 where its pill starts at 50), so the stretch before the first item is no room.
+     */
+    private fun widestGap(bar: Box, parts: List<Box>, inner: Boolean = false): Box {
         val spans = parts.map { it.left to it.right }.sortedBy { it.first }
+        if (inner && spans.isEmpty()) return Box(bar.left, bar.top, bar.left, bar.bottom)
         var best = Box(bar.left, bar.top, bar.left, bar.bottom)
-        var cursor = bar.left
+        var cursor = if (inner) spans.first().second else bar.left
         for ((l, r) in spans) {
             if (l > cursor && l - cursor > best.width()) best = Box(cursor, bar.top, l, bar.bottom)
             cursor = maxOf(cursor, r)
         }
-        if (bar.right - cursor > best.width()) best = Box(cursor, bar.top, bar.right, bar.bottom)
+        if (!inner && bar.right - cursor > best.width()) best = Box(cursor, bar.top, bar.right, bar.bottom)
         return best
     }
 }

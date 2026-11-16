@@ -575,7 +575,8 @@ class BarController(private val service: AccessibilityService, val displayId: In
                 service.clearCache()
                 val scanned = runCatching {
                     if (desk) StatusBarScan.scanTaskbar(windows[listed.indexOf(barFact)])
-                    else StatusBarScan.scan(windows[listed.indexOf(barFact)])
+                    else StatusBarScan.scan(windows[listed.indexOf(barFact)],
+                        StatusBarScan.cutouts(service.getSystemService(android.hardware.display.DisplayManager::class.java)?.getDisplay(displayId)))
                 }
                     .onFailure { Log.w(tag, "scan failed", it) }.getOrNull()
                 // A reading kept from before has no node (a scan without a tree brought none).
@@ -585,6 +586,12 @@ class BarController(private val service: AccessibilityService, val displayId: In
         }
         if (s == null) spacerNode = null
         snap = s
+        // A phone's bar holds the strip to a few items, fewer beside the Now Bar's chip (BarRules.cap).
+        // A reading with no tree knows nothing of the chip: the last limit stands.
+        if (s != null && s.summary != BarRules.NO_TREE && s.cap != itemCap.value) {
+            itemCap.value = s.cap
+            Log.i(tag, "items at most ${s.cap ?: "any"}")
+        }
         val cfg = Store.config.value
         val interactive = pm.isInteractive
         val locked = km.isKeyguardLocked
@@ -726,12 +733,20 @@ class BarController(private val service: AccessibilityService, val displayId: In
         // and for presenting's ‹ when the home area has no window.
         val plan = cfg.stripPlan(strip.area, active, expanded.value,
             strip.dropped.isNotEmpty() || (strip.area == carrier && cfg.carrierOverflow(owed.value, owes, active)))
+        // Beside a phone's Now Bar the room left of the camera holds one item or a ‹, never both (241 px there, 112 of
+        // them a ‹'s): the one item shows as it is set to, wider than the room if it must (the user's choice: the strip
+        // then reaches toward the camera), and the rest wait for the chip to go.
+        val besideChip = !desk && itemCap.value == BarRules.PHONE_ITEMS_BESIDE_CHIP
         val shownEntries = entries(plan.visible)
         val revealedEntries = entries(plan.revealed)
         // The one rule for an empty strip: what it puts on the screen, never how many entries it has.
         // The empty capsule shows once: in the home area, or the first strip's while the home area has no window, and not
         // beside another area's items.
-        val drawn = !claim.whole && StripContent.drawn(shownEntries + revealedEntries, plan.chevron, look.value.pill,
+        // With no ‹ (beside a phone's Now Bar), items that had no room are not drawn either: a strip that kept none of them
+        // is empty, never a pill with nothing in it.
+        val chevronShown = plan.chevron && !besideChip
+        val kept = if (chevronShown) shownEntries + revealedEntries else shownEntries.filter { it.item.id !in strip.dropped }
+        val drawn = !claim.whole && StripContent.drawn(kept, chevronShown, look.value.pill,
             home = strip.area == StripContent.capsuleArea(cfg.homeArea(), carrier, owed.value) && (onView.value - strip.area).isEmpty())
         // While the window is invisible nothing draws, and the remeasure Compose hands to the next draw would wait for it for
         // good. Measuring still runs, if it is asked for: the rule above is heard as soon as the composition changes.
@@ -749,12 +764,12 @@ class BarController(private val service: AccessibilityService, val displayId: In
             }) {
             if (claim.whole) androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier) else Strip(
                 visible = shownEntries,
-                revealed = revealedEntries,
-                showChevron = plan.chevron,
+                revealed = if (besideChip) emptyList() else revealedEntries,
+                showChevron = plan.chevron && !besideChip,
                 // The first strip's ‹ also comes and goes for the areas with no room. With several areas in use it keeps
                 // a ‹'s room whatever it draws, so that what it keeps, and with it the room behind it, never follows that ‹.
-                chevronAlways = plan.chevronAlways || (!desk && strip.area == carrier && cfg.areasInUse().size > 1),
-                chevronReservePx = (30 * density).toInt(),
+                chevronAlways = !besideChip && (plan.chevronAlways || (!desk && strip.area == carrier && cfg.areasInUse().size > 1)),
+                chevronReservePx = if (besideChip) 0 else (30 * density).toInt(),
                 expanded = plan.open,
                 chevronOnLeft = strip.area != Position.LEFT,
                 look = look.value,
@@ -768,6 +783,8 @@ class BarController(private val service: AccessibilityService, val displayId: In
                 // The item a popup belongs to: an item's popup and its right-click menu are the item's, the ‹ menu is ‹'s.
                 open = menus.menuKey?.owner?.ifEmpty { null }.takeIf { menus.menuStrip === strip },
                 onReach = { reach.intValue = it },
+                maxItems = if (desk) Int.MAX_VALUE else itemCap.value ?: Int.MAX_VALUE,
+                atLeast = if (besideChip) 1 else 0,
             )
         }
     }
@@ -810,6 +827,9 @@ class BarController(private val service: AccessibilityService, val displayId: In
 
     private var dragFrom: Drag? = null
     private var dragCenters: Map<String, Float> = emptyMap()
+    /** The most items a strip shows on this bar ([BarSnapshot.cap]); null: as many as have room. */
+    private val itemCap = mutableStateOf<Int?>(null)
+
     /** While an item is dragged: its id and the index it would land at, for the strip's live order. */
     private val dragPreview = mutableStateOf<Pair<String, Int>?>(null)
 

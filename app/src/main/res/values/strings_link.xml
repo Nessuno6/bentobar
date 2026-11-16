@@ -11,5 +11,9 @@
     <string name="link_disabled">Turn on Cross-device services in Google settings to link devices</string>
     <string name="link_timeout">Google Play services did not respond in time</string>
     <string name="link_failed">Could not open the device picker</string>
+    <string name="link_tile">Device link</string>
+    <string name="link_tile_off">Off</string>
+    <string name="link_tile_connecting">Linking…</string>
+    <string name="link_tile_paused">Paused for sharing</string>
     <string name="link_could_not_connect">Could not link to %1$s</string>
 </resources>

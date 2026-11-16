@@ -26,6 +26,10 @@ object StatusBarScan {
     fun overhangs(left: Int, top: Int, right: Int, bottom: Int, screenW: Int, screenH: Int): Boolean =
         left < 0 && top < 0 && right > screenW && bottom > screenH
 
+    /** The display's cutouts (a phone's camera hole) as they stand in its current rotation, in screen pixels. */
+    fun cutouts(display: android.view.Display?): List<Box> =
+        runCatching { display?.cutout?.boundingRects?.map { it.box() } }.getOrNull().orEmpty().filter { it.width() > 0 && it.height() > 0 }
+
     /** What a scan brings back: the plain [snapshot], and the live spacer node (a cheap "did anything move?" check for [BarController]). */
     class Scanned(val snapshot: BarSnapshot, val spacerNode: AccessibilityNodeInfo?)
 
@@ -40,10 +44,11 @@ object StatusBarScan {
         return WindowFact(w.id, kind, Rect().also { w.getBoundsInScreen(it) }.box())
     }
 
-    fun scan(w: AccessibilityWindowInfo): Scanned {
+    /** [cutouts]: the display's cutouts, in screen pixels (`BarRules.parse`). */
+    fun scan(w: AccessibilityWindowInfo, cutouts: List<Box> = emptyList()): Scanned {
         val bar = Rect().also { w.getBoundsInScreen(it) }.box()
         // One round trip: prefetch the (small, ~35 node) tree instead of an IPC per getChild().
-        val root = root(w) ?: return Scanned(BarRules.parse(w.id, bar, emptyList()), null)
+        val root = root(w) ?: return Scanned(BarRules.parse(w.id, bar, emptyList(), cutouts), null)
         var spacerNode: AccessibilityNodeInfo? = null
         val nodes = ArrayList<BarNode>()
         val stack = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
@@ -56,7 +61,7 @@ object StatusBarScan {
                 described = !n.contentDescription.isNullOrEmpty(), clickable = n.isClickable, children = n.childCount)
             for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.add(it to depth + 1) }
         }
-        return Scanned(BarRules.parse(w.id, bar, nodes), spacerNode)
+        return Scanned(BarRules.parse(w.id, bar, nodes, cutouts), spacerNode)
     }
 
     /**

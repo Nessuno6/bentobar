@@ -54,6 +54,29 @@ object ScreenTimeLoad {
     /** The menu's: the same, with the apps in front. Wanted only while the menu is open, and forgotten when it closes. */
     val apps = Background.refresher<Unit, Day>(ScreenTimeItem.type, every = { _, d -> every(d) }, load = { _, _ -> read(Env.app, withApps = true) })
 
+    /**
+     * Whether an app of [packages] is in front now: its last activity event within the last ten minutes a resume with no
+     * pause or stop after it. Null without Usage access. Device batteries' link asks it for Quick Share alone
+     * ([DeviceLinkRules.QUICK_SHARE]); nothing of it is kept or logged. Background thread.
+     */
+    fun inFront(context: Context, packages: Set<String>): Boolean? = runCatching {
+        val usm = context.getSystemService(UsageStatsManager::class.java) ?: return@runCatching null
+        if (!Usage.granted(context)) return@runCatching null
+        val now = System.currentTimeMillis()
+        val events = usm.queryEvents(now - 10 * MINUTE, now) ?: return@runCatching false
+        val e = UsageEvents.Event()
+        var front = false
+        while (events.hasNextEvent()) {
+            events.getNextEvent(e)
+            if (e.packageName !in packages) continue
+            when (e.eventType) {
+                UsageEvents.Event.ACTIVITY_RESUMED -> front = true
+                UsageEvents.Event.ACTIVITY_PAUSED, UsageEvents.Event.ACTIVITY_STOPPED -> front = false
+            }
+        }
+        front
+    }.getOrNull()
+
     /** Background thread. Usage access taken back while this runs is "no access", never a throw. */
     private fun read(context: Context, withApps: Boolean): Day {
         val now = Now.wall()

@@ -75,6 +75,43 @@ class StatusBarScanTest {
         assertEquals(Box(168, 0, 1681, 41), s.free)
     }
 
+    @Test fun aCameraHoleTakesRoomAsAnItemDoes() {
+        // A phone's bar: a chip at the left, the camera hole in the middle, the system icons at the right. Without the
+        // hole the widest gap ran across the camera and the strip stood under it, its icon hidden by the hole.
+        val phone = Box(0, 0, 1440, 128)
+        fun at(id: String, l: Int, r: Int) = BarNode(id, Box(l, 0, r, 128), 1, "", described = true)
+        val tree = listOf(BarNode("", phone, 0, children = 3), at("chip", 50, 470), at("system_icons", 900, 1400))
+        val hole = Box(680, 20, 760, 100)
+        assertEquals(Box(470, 0, 900, 128), BarRules.parse(7, phone, tree).free)
+        assertEquals(Box(470, 0, 680, 128), BarRules.parse(7, phone, tree, listOf(hole)).free)
+        // A hole below the bar (a tablet's camera in its bezel, or the bar elsewhere) changes nothing.
+        assertEquals(Box(470, 0, 900, 128), BarRules.parse(7, phone, tree, listOf(Box(680, 200, 760, 280))).free)
+        // The spacer stops short of the hole too, on the wider side.
+        val spaced = tree + BarNode("DesktopStatusBarSpacer", Box(470, 0, 900, 128), 1)
+        assertEquals(Box(470, 0, 680, 128), BarRules.parse(7, phone, spaced, listOf(hole)).free)
+    }
+
+    @Test fun onAPhoneTheBarsEndsAreNoRoom() {
+        // As seen on a phone with a call chip: its node starts at 137, after its own icon, and the stretch before it is the
+        // rounded corner and that icon. With the camera splitting the middle, the room is the stretch right of the camera.
+        val phone = Box(0, 0, 1440, 128)
+        fun at(id: String, l: Int, r: Int) = BarNode(id, Box(l, 0, r, 128), 1, "", described = true)
+        val tree = listOf(BarNode("", phone, 0, children = 4), at("chip", 137, 470), at("notificationIcons", 480, 610), at("system_icons", 880, 1400))
+        assertEquals(Box(755, 0, 880, 128), BarRules.parse(7, phone, tree, listOf(Box(685, 0, 755, 128))).free)
+    }
+
+    @Test fun aPhoneShowsThreeItemsAndOneBesideTheNowBar() {
+        val phone = Box(0, 0, 1440, 128)
+        fun at(id: String, l: Int, r: Int) = BarNode(id, Box(l, 0, r, 128), 1, "", described = true)
+        val hole = listOf(Box(685, 0, 755, 128))
+        val icons = listOf(BarNode("", phone, 0, children = 3), at("notificationIcons", 480, 610), at("system_icons", 880, 1400))
+        assertEquals(3, BarRules.parse(7, phone, icons, hole).cap)
+        // The Now Bar's chip: one wide item left of the camera.
+        assertEquals(1, BarRules.parse(7, phone, icons + at("chip", 137, 470), hole).cap)
+        // No camera in the bar: no limit (a Googlebook, a tablet).
+        assertNull(BarRules.parse(7, phone, icons + at("chip", 137, 470)).cap)
+    }
+
     @Test fun aNodeAsWideAsTheBarIsNoItem() {
         // A wrapper around the whole bar must not fill it: only leaf-ish pieces take room.
         val wrapper = node("wrapper", 0, 1920, described = true)

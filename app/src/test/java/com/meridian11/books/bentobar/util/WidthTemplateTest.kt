@@ -39,3 +39,17 @@ class WidthTemplateUnitsTest {
         assertEquals("Keep 888m", Fmt.widthTemplate("Keep 25m"))
     }
 }
+
+class DigitSlotTest {
+    @Test fun everyNumberHoldsTwoDigits() {
+        assertEquals("88%", Fmt.digitSlot("7%"))
+        assertEquals(Fmt.digitSlot("7%"), Fmt.digitSlot("20%"))
+        assertEquals("88 new", Fmt.digitSlot("3 new"))
+        assertEquals("888", Fmt.digitSlot("100"))
+        assertEquals("88.88 K/s", Fmt.digitSlot("0.44 K/s"))
+    }
+
+    @Test fun wordsAloneHaveNoSlot() {
+        org.junit.Assert.assertNull(Fmt.digitSlot("Muted"))
+    }
+}

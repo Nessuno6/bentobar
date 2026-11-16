@@ -75,7 +75,7 @@ spellcheck short_text clear_all downloading call hourglass_bottom
 """.split()
 
 # Symbols also exported as vector drawables (tiles, notifications, launcher icon), from the filled font.
-DRAWABLES = ["coffee", "timer", "avg_pace", "event", "pause", "play_arrow", "add", "stop", "videocam", "open_in_new"]
+DRAWABLES = ["coffee", "timer", "avg_pace", "event", "pause", "play_arrow", "add", "stop", "videocam", "open_in_new", "link"]
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = pathlib.Path(os.environ.get("BENTOBAR_CACHE", pathlib.Path.home() / ".cache/bentobar"))

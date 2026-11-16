@@ -311,15 +311,18 @@ object DevicesItem : ItemType("devices", R.string.item_devices_title, Sym.MOUSE,
             }
             MenuEntry(Sym.BLUETOOTH, stringResource(R.string.devices_bluetooth_settings)) { host.close(); Env.launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
             // The link to the user's other device: its batteries here, and this one's there.
-            val peer = Link.peer
+            val peer = Link.lastName()
             when {
                 Link.linked && peer != null -> {
                     MenuNote(stringResource(R.string.link_linked, peer))
                     MenuEntry(Sym.LINK, stringResource(R.string.link_unlink)) { Link.unlink() }
                 }
                 Link.connecting && peer != null -> MenuNote(stringResource(R.string.link_connecting, peer))
+                // Links again to the device last linked by itself; the picker only when there is none, or it isn't found.
+                // (The Device link tile is the picker's way to another device.)
                 else -> MenuEntry(Sym.LINK, if (peer != null) stringResource(R.string.link_again, peer) else stringResource(R.string.link_open)) {
-                    host.close(); Env.launch(Intent(Env.app, com.meridian11.books.bentobar.ui.LinkActivity::class.java))
+                    host.close()
+                    Link.autolink { Env.launch(Intent(Env.app, com.meridian11.books.bentobar.ui.LinkActivity::class.java)) }
                 }
             }
         }

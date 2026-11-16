@@ -36,4 +36,18 @@ class FitStripTest {
         val (keep, _) = fitStrip(widths, 10, 130, chevronAlways = false, chevronPx = 30, keepEnd = false)
         assertEquals(listOf(true, true, false), keep.toList())
     }
+
+    @Test fun aCapKeepsThatManyFromTheKeptEnd() {
+        val widths = listOf(40, 40, 40, 40)
+        val (keep, _) = fitStrip(widths, 10, 1000, chevronAlways = false, chevronPx = 30, keepEnd = true, maxItems = 3)
+        assertEquals(listOf(false, true, true, true), keep.toList())
+        val (one, _) = fitStrip(widths, 10, 1000, chevronAlways = false, chevronPx = 30, keepEnd = false, maxItems = 1)
+        assertEquals(listOf(true, false, false, false), one.toList())
+    }
+
+    @Test fun atLeastKeepsAnItemWiderThanTheRoom() {
+        val (keep, used) = fitStrip(listOf(200, 40), 10, 150, chevronAlways = false, chevronPx = 0, keepEnd = false, maxItems = 1, atLeast = 1)
+        assertEquals(listOf(true, false), keep.toList())
+        assertEquals(200, used)
+    }
 }

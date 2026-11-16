@@ -43,6 +43,7 @@ class ManifestTest {
             "android.permission.POST_PROMOTED_NOTIFICATIONS",
             "android.permission.READ_CALENDAR",
             "android.permission.BLUETOOTH_CONNECT",
+            "android.permission.BLUETOOTH_SCAN",
             "android.permission.ACCESS_COARSE_LOCATION",
             "android.permission.SCHEDULE_EXACT_ALARM",
             "android.permission.QUERY_ADVANCED_PROTECTION_MODE",
@@ -146,7 +147,7 @@ class ManifestTest {
         // providers and widget configuration.
         val exported = (application.all("activity") + application.all("service") + application.all("receiver") + application.all("provider"))
             .filter { it.attr("exported") == "true" }.map { it.attr("name") }.toSet()
-        assertEquals(setOf(".ui.MainActivity", ".ui.BarMenuActivity", ".ui.LinkActivity", ".bar.BarService", ".tile.BarTile", ".tile.AwakeTile", ".tile.TimerTile",
+        assertEquals(setOf(".ui.MainActivity", ".ui.BarMenuActivity", ".ui.LinkActivity", ".bar.BarService", ".tile.BarTile", ".tile.AwakeTile", ".tile.LinkTile", ".tile.TimerTile",
             ".items.MediaAccess", ".items.NoticeAccess", ".items.DevicesProvider", ".items.ItemsProvider", ".widget.WidgetSettingsActivity",
             "rikka.shizuku.ShizukuProvider"), exported)
         val shizukuProvider = application.all("provider").single { it.attr("name") == "rikka.shizuku.ShizukuProvider" }
@@ -198,7 +199,7 @@ class ManifestTest {
             .map { it.attr("name").removePrefix(prefix) }.toSet()
         // Debug builds add the adb test hooks from src/debug, guarded by the shell's DUMP permission; a release has none.
         val hooks = if (type == "debug") setOf(".util.DebugReceiver", ".util.BarFlipActivity") else emptySet()
-        assertEquals(setOf(".ui.MainActivity", ".ui.BarMenuActivity", ".ui.LinkActivity", ".bar.BarService", ".tile.BarTile", ".tile.AwakeTile", ".tile.TimerTile",
+        assertEquals(setOf(".ui.MainActivity", ".ui.BarMenuActivity", ".ui.LinkActivity", ".bar.BarService", ".tile.BarTile", ".tile.AwakeTile", ".tile.LinkTile", ".tile.TimerTile",
             ".items.MediaAccess", ".items.NoticeAccess", ".items.DevicesProvider", ".items.ItemsProvider", ".widget.WidgetSettingsActivity",
             "rikka.shizuku.ShizukuProvider", "androidx.profileinstaller.ProfileInstallReceiver") + hooks, exported)
         // The one a library adds: AndroidX's profile installer, which only the shell (it holds DUMP) can start.

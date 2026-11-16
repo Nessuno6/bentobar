@@ -259,6 +259,10 @@ fun Strip(
      * not, each time they are laid out. With [chevronAlways] it is the same number with the ‹ and without.
      */
     onReach: (Int) -> Unit = {},
+    /** The most items it shows while ‹ is folded (a phone's bar, `BarSnapshot.cap`); open, ‹ shows every one. */
+    maxItems: Int = Int.MAX_VALUE,
+    /** The fewest it keeps, room or not: the strip is then wider than its room (a phone's bar beside the Now Bar). */
+    atLeast: Int = 0,
 ) {
     val pillBg = when (look.pill) {
         Pill.NONE -> Color.Transparent
@@ -351,7 +355,8 @@ fun Strip(
         val items = if (chevronOnLeft) revealed + visible else visible + revealed
         if (chevronOnLeft) chevron()
         FitRow(ids = items.map { it.item.id }, maxWidthPx = maxWidthPx, chevronAlways = chevronAlways, chevronPx = chevronReservePx,
-            keepEnd = chevronOnLeft, spacing = look.spacing, onFit = { used -> onReach(used + chevronReservePx + 2 * ends) },
+            keepEnd = chevronOnLeft, spacing = look.spacing, maxItems = if (expanded) Int.MAX_VALUE else maxItems, atLeast = atLeast,
+            onFit = { used -> onReach(used + chevronReservePx + 2 * ends) },
             onDropped = { ids -> glow.dropped(ids); ids.forEach(events::gone); onOverflow(ids) }) {
             // key(): remembered state (hover, held width) belongs to the item, not to its position,
             // or an item popping in would inherit its neighbour's width.
@@ -463,22 +468,29 @@ internal fun imageWidthDp(iconDp: Float, width: Int, height: Int): Float =
  * Which of [widths] fit in [limit] with [gap] between them, keeping from the start (or the end with
  * [keepEnd]) and stopping at the first that doesn't fit; and the width they take.
  */
-internal fun fitWidths(widths: List<Int>, gap: Int, limit: Int, keepEnd: Boolean): Pair<BooleanArray, Int> {
+internal fun fitWidths(widths: List<Int>, gap: Int, limit: Int, keepEnd: Boolean, maxItems: Int = Int.MAX_VALUE,
+                       atLeast: Int = 0): Pair<BooleanArray, Int> {
     val keep = BooleanArray(widths.size)
     var used = 0
+    var kept = 0
     for (i in if (keepEnd) widths.indices.reversed() else widths.indices) {
         val w = widths[i] + if (used > 0) gap else 0
-        if (used + w > limit) break
+        if ((used + w > limit && kept >= atLeast) || kept >= maxItems) break
         keep[i] = true
         used += w
+        kept++
     }
     return keep to used
 }
 
-/** [fitWidths] for the strip: everything in [budget] if it fits there (‹ needn't show), else room for ‹. */
-internal fun fitStrip(widths: List<Int>, gap: Int, budget: Int, chevronAlways: Boolean, chevronPx: Int, keepEnd: Boolean) =
-    fitWidths(widths, gap, if (chevronAlways) budget - chevronPx else budget, keepEnd).takeIf { (k, _) -> k.all { it } }
-        ?: fitWidths(widths, gap, budget - chevronPx, keepEnd)
+/**
+ * [fitWidths] for the strip: everything in [budget] if it fits there (‹ needn't show), else room for ‹. [maxItems] is the
+ * most it keeps whatever the room (a phone's bar, `BarSnapshot.cap`); what it leaves is behind ‹ as what has no room.
+ */
+internal fun fitStrip(widths: List<Int>, gap: Int, budget: Int, chevronAlways: Boolean, chevronPx: Int, keepEnd: Boolean,
+                      maxItems: Int = Int.MAX_VALUE, atLeast: Int = 0) =
+    fitWidths(widths, gap, if (chevronAlways) budget - chevronPx else budget, keepEnd, maxItems, atLeast).takeIf { (k, _) -> k.all { it } }
+        ?: fitWidths(widths, gap, budget - chevronPx, keepEnd, maxItems, atLeast)
 
 /**
  * A row that drops children which don't fit, from the start (or the end when !keepEnd), and
@@ -489,14 +501,15 @@ internal fun fitStrip(widths: List<Int>, gap: Int, budget: Int, chevronAlways: B
  */
 @Composable
 private fun FitRow(ids: List<String>, maxWidthPx: Int, chevronAlways: Boolean, chevronPx: Int, keepEnd: Boolean, spacing: Dp,
-                   onFit: (Int) -> Unit, onDropped: (Set<String>) -> Unit, content: @Composable () -> Unit) {
+                   onFit: (Int) -> Unit, onDropped: (Set<String>) -> Unit, maxItems: Int = Int.MAX_VALUE, atLeast: Int = 0,
+                   content: @Composable () -> Unit) {
     val last = remember { arrayOf<Set<String>?>(null) }
     Layout(content) { measurables, constraints ->
         val gap = spacing.roundToPx()
         val placeables = measurables.map { it.measure(Constraints(maxHeight = constraints.maxHeight)) }
         val widths = placeables.map { it.width }
         val budget = minOf(maxWidthPx, constraints.maxWidth).coerceAtLeast(0)
-        val (keep, used) = fitStrip(widths, gap, budget, chevronAlways, chevronPx, keepEnd)
+        val (keep, used) = fitStrip(widths, gap, budget, chevronAlways, chevronPx, keepEnd, maxItems, atLeast)
         val dropped = ids.filterIndexed { i, _ -> i < keep.size && !keep[i] }.toSet()
         if (dropped != last[0]) { last[0] = dropped; onDropped(dropped) }
         onFit(used)
@@ -722,8 +735,9 @@ private fun ItemView(entry: StripEntry, look: StripLook, events: StripEvents, gl
                 else Modifier.slides(slider.steps, rtl, onHeld = { held = it }, onContext = { context() }) { level, done -> events.slide(entry.item, level, done) })
         }
         if (showText) {
-            // Texts that take turns sit in a place as wide as the widest of them; a ticking number in one sized for its widest reading.
-            val templates = s.turns ?: if (s.widthKey != null) listOf(Fmt.widthTemplate(s.text!!)) else null
+            // Texts that take turns sit in a place as wide as the widest of them; a ticking number in one sized for its widest
+            // reading; any other number in one of two digits at least, so a count or a load passing 9 moves nothing.
+            val templates = s.turns ?: if (s.widthKey != null) listOf(Fmt.widthTemplate(s.text!!)) else Fmt.digitSlot(s.text!!)?.let(::listOf)
             // In pixels, so measured again when the display's size or the font size changes under a strip that stays: the
             // measurer is a new one then.
             val slot = templates?.let { tpls -> remember(tpls, textStyle, measurer) { tpls.maxOf { measurer.measure(it, textStyle, maxLines = 1).size.width } } }

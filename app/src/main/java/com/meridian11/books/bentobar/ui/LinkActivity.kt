@@ -31,6 +31,17 @@ class LinkActivity : ComponentActivity() {
         done()
     }
 
+    /**
+     * Nearby devices' scan (BLUETOOTH_SCAN), asked for once before the picker: with it the Device link tile finds the
+     * device last linked by itself. The picker opens whatever the answer.
+     */
+    private val scanAsk = registerForActivityResult(ActivityResultContracts.RequestPermission()) { requestPicker() }
+
+    // Once refused for good, Android answers at once with no dialog, and the picker opens straight away.
+    private fun pickerOrAsk() {
+        if (Link.canScan()) requestPicker() else scanAsk.launch(android.Manifest.permission.BLUETOOTH_SCAN)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Env.init(this)
@@ -43,7 +54,7 @@ class LinkActivity : ComponentActivity() {
                 acceptWake(intent)
                 done()
             }
-            LinkRules.CreateStep.START_PICKER -> requestPicker()
+            LinkRules.CreateStep.START_PICKER -> pickerOrAsk()
         }
     }
 

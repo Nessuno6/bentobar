@@ -34,6 +34,42 @@ object DeviceLinkRules {
     /** How long an outbound or incoming link waits to settle before giving up so the menu does not stay stuck. */
     const val CONNECT_TIMEOUT_MS = 20_000L
 
+    /**
+     * Whether Apple's peer-to-peer Wi-Fi (AWDL) is up, from the names of the network interfaces that are up: Quick Share
+     * to an iPhone, iPad or Mac brings one up (`awdl0`, with its low-latency companion `llw0`) for as long as it sends.
+     * The link holds the same radio, and Quick Share stalled beside it, so the link gives way while AWDL is up.
+     */
+    fun awdl(upInterfaces: Collection<String>): Boolean =
+        upInterfaces.any { n -> AWDL_PREFIXES.any { n.startsWith(it, ignoreCase = true) } }
+    private val AWDL_PREFIXES = listOf("awdl", "llw")
+
+    /**
+     * How often the link looks for AWDL, the share sheet and Quick Share while it is open, opening, or waiting for them
+     * to end: the share sheet comes about a second before Quick Share, which decides when it starts whether it can reach
+     * Apple devices, so the link has to be gone by then.
+     */
+    const val AWDL_EVERY_MS = 1_000L
+
+    /**
+     * Quick Share (Samsung's): while it is in front the link gives way at once. Its Apple mode (AirDrop) drops the Wi-Fi
+     * network and takes the radio for AWDL, and with the link holding on it found no Apple device; waiting for AWDL
+     * to come up was waiting for something the link kept from happening.
+     */
+    val QUICK_SHARE = setOf(
+        "com.samsung.android.app.sharelive",
+        // The system's share sheet, which comes first: Quick Share checks for AWDL as it starts, too late to give way then.
+        "com.android.intentresolver",
+    )
+
+    /** After Quick Share left the front and AWDL went down, the link waits this long: a send can go on in the background. */
+    const val LINGER_MS = 60_000L
+
+    /** Whether the link gives way now: AWDL is up, or Quick Share is in front (null: no Usage access to tell). */
+    fun givesWay(awdl: Boolean, quickShare: Boolean?): Boolean = awdl || quickShare == true
+
+    /** Whether a link that gave way opens again: nothing needs the radio, and has not for [LINGER_MS]. */
+    fun relinks(busy: Boolean, sinceBusyMs: Long): Boolean = !busy && sinceBusyMs >= LINGER_MS
+
     /** A name as one field: no tabs or line breaks, and not too long. */
     private fun field(name: String) = name.replace(Regex("[\\t\\r\\n]+"), " ").trim().take(NAME_MAX)
     private const val NAME_MAX = 60

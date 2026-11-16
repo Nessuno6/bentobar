@@ -119,7 +119,28 @@ object Fmt {
      * digits three 8s are wider than any of them. Clock digits keep their shape ("9:42" holds
      * "88:88"), and K/M/G/T after a number take the widest letter.
      */
-    fun widthTemplate(text: String): String {
+    fun widthTemplate(text: String): String = template(text, least = 3)
+
+    /**
+     * The slot every other item's text sits in ([widthTemplate] is for the ticking ones): each number holds at least two
+     * digits ("7%" holds "88%", "3 new" holds "88 new"), so a number going from one digit to two (a load from 7 to 20,
+     * a count from 9 to 10) moves nothing on the bar; only an item coming or going does. Null for a text with no digit.
+     */
+    fun digitSlot(text: String): String? {
+        if (text.none { it.isDigit() }) return null
+        val out = StringBuilder()
+        var i = 0
+        while (i < text.length) {
+            if (!text[i].isDigit()) { out.append(text[i]); i++; continue }
+            var j = i
+            while (j < text.length && text[j].isDigit()) j++
+            repeat(maxOf(j - i, 2)) { out.append('8') }
+            i = j
+        }
+        return out.toString()
+    }
+
+    private fun template(text: String, least: Int): String {
         val out = StringBuilder()
         var i = 0
         while (i < text.length) {
@@ -148,7 +169,7 @@ object Fmt {
                 while (j < text.length && text[j].isDigit()) j++
             }
             val digits = text.substring(i, j).count { it.isDigit() }
-            repeat(maxOf(digits, 3)) { out.append('8') }
+            repeat(maxOf(digits, least)) { out.append('8') }
             i = j
         }
         return out.toString()

@@ -59,4 +59,26 @@ class DeviceLinkRulesTest {
             Device(DeviceLinkRules.PREFIX + "0", "My Phone", Kind.PHONE, 74, charging = true))
         assertEquals(listOf(Battery(Kind.MOUSE, "Mouse", 40, charging = false)), DeviceLinkRules.outgoing(shown))
     }
+
+    @Test fun awdlIsAppleWifiOnlyNotWifiAwareOrDirect() {
+        org.junit.Assert.assertTrue(DeviceLinkRules.awdl(listOf("lo", "wlan0", "awdl0")))
+        org.junit.Assert.assertTrue(DeviceLinkRules.awdl(listOf("wlan0", "llw0")))
+        // Quick Share between Android devices uses Wi-Fi Aware and Wi-Fi Direct: the link stays for those.
+        org.junit.Assert.assertFalse(DeviceLinkRules.awdl(listOf("lo", "wlan0", "wifi-aware0", "aware_data0", "p2p0", "rmnet_data0")))
+        org.junit.Assert.assertFalse(DeviceLinkRules.awdl(emptyList()))
+    }
+
+    @Test fun quickShareInFrontOrAwdlTakesTheRadio() {
+        org.junit.Assert.assertTrue(DeviceLinkRules.givesWay(awdl = false, quickShare = true))
+        org.junit.Assert.assertTrue(DeviceLinkRules.givesWay(awdl = true, quickShare = null))
+        org.junit.Assert.assertFalse(DeviceLinkRules.givesWay(awdl = false, quickShare = false))
+        // Without Usage access only AWDL can tell.
+        org.junit.Assert.assertFalse(DeviceLinkRules.givesWay(awdl = false, quickShare = null))
+    }
+
+    @Test fun theLinkComesBackAMinuteAfterQuickShare() {
+        org.junit.Assert.assertFalse(DeviceLinkRules.relinks(busy = true, sinceBusyMs = 0))
+        org.junit.Assert.assertFalse(DeviceLinkRules.relinks(busy = false, sinceBusyMs = 30_000))
+        org.junit.Assert.assertTrue(DeviceLinkRules.relinks(busy = false, sinceBusyMs = DeviceLinkRules.LINGER_MS))
+    }
 }

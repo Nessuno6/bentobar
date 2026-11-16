@@ -38,7 +38,10 @@ class OneWayOutTest {
             if (f.place() == "net/HttpTransport.kt") continue
             // Device batteries' link opens a channel to the user's other device through Google Play services (the Cross
             // device SDK's openConnection), and only that: no other way out is allowed there either.
-            val text = if (f.place() == "items/Link.kt") code(f).replace("participant.openConnection(CHANNEL)", "") else code(f)
+            // It also lists the names of the network interfaces that are up (AWDL: Quick Share to an Apple device), which
+            // opens nothing: java.net.NetworkInterface there, and no other part of java.net.
+            val text = if (f.place() == "items/Link.kt") code(f).replace("participant.openConnection(CHANNEL)", "")
+                .replace("java.net.NetworkInterface.getNetworkInterfaces()", "") else code(f)
             for (way in ways) assertTrue("${f.place()} mentions $way: connections are opened in net/HttpTransport.kt only", way !in text)
         }
     }
