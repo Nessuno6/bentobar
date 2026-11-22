@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.1-notch.1 (2026-11-22)
+
+- **Merged upstream BentoBar 2.3.0 and 2.3.1:**
+  - **Calendar & Next meeting:** unified meeting verdict rules (`Meetings.judge`, `Meetings.pick`, `Meetings.once`), **Setup › Calendar events** card (calendar toggles, solo/unanswered/free toggles, title-exclusion words), Next meeting options (today vs. any day, title + time vs. time alone, setup shortcut), month-view meeting actions, debounced provider re-reads (`ReadAgain`), and preserving prior calendar readings when a query or attendee read fails (`Calendar`).
+  - **Bar & SystemUI:** SystemUI-only status bar scanning (`BarRules.isStatusBarPackage` in `StatusBarScan.scan`), strip-on-view color sampling (`ColorReader` / `noteOnView`), configuration-change filtering (`BarRules.afterConfig`), and cheaper placing (`lookInputs`, `chipInputs`, `measureAgain`, guarded trace strings).
+  - **Items & reliability:** Screen time API 35 `UsageEventsQuery`, Heat on-demand CPU sampling (`CpuSampler.current()`), notification data/URI icon guard, sound stream max cache, privacy-safe intent/ticker logs, and undo/layout/online fixes.
+- **Preserved all fork features:**
+  - **Setup & About:** `SetupPage` keeps **Setup › Shizuku** and **Setup › Updates** alongside the new **Setup › Calendar events** card; One UI styling, icons, fonts, and home screen widgets remain intact.
+  - **Device batteries & pairing:** kept `ui/LinkCard` pairing card, two-way `Link` connections & reconnect flow, Quick Share/AWDL coexistence (`ScreenTimeLoad.inFront`), and home screen widget/content providers.
+  - **Phone notch/cutout & external taskbar:** kept cutout-aware corner pill placement, `itemCap`, `desk` external-display taskbar bar, and glass blur controls.
+  - **Shizuku & root:** kept Shizuku `UserService` + `su` fallback for hardware temperatures, per-app CPU/memory lists, battery cycles/health, and accessory batteries.
+- **Tests:** adjusted `HidePathTest`, `StatusBarScanTest`, and `ScreenTimeKindsTest` source-scanning slices for fork method signatures.
+
 ## 2.3.1 (2026-11-21)
 
 - **A calendar read that fails keeps the last reading.** A query that throws or gives no cursor, and an attendee read
