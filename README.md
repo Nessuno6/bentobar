@@ -175,7 +175,7 @@ as yours (the calendar doesn't say who made it); add yourself as a guest.
 ## Install
 
 BentoBar was made for Googlebooks (Googlebook OS, Android 17); this fork is made and tested on a Samsung Galaxy tablet
-with One UI 9 (Android 17), and runs on Android 14 or newer. If you have the official BentoBar, uninstall it first:
+with One UI 9 (Android 17), and requires Android 17 (API 37). If you have the official BentoBar, uninstall it first:
 this fork is signed with a different key, so Android won't install it over the official one.
 
 1. On your device, download **[BentoBar.apk](../../releases/latest/download/BentoBar.apk)** from the latest release.

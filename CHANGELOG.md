@@ -2,6 +2,7 @@
 
 ## 2.3.1-notch.1 (2026-11-22)
 
+- **SDK:** set `minSdk = 37` to match `targetSdk = 37` and `compileSdk = 37` (Android 17).
 - **Merged upstream BentoBar 2.3.0 and 2.3.1:**
   - **Calendar & Next meeting:** unified meeting verdict rules (`Meetings.judge`, `Meetings.pick`, `Meetings.once`), **Setup › Calendar events** card (calendar toggles, solo/unanswered/free toggles, title-exclusion words), Next meeting options (today vs. any day, title + time vs. time alone, setup shortcut), month-view meeting actions, debounced provider re-reads (`ReadAgain`), and preserving prior calendar readings when a query or attendee read fails (`Calendar`).
   - **Bar & SystemUI:** SystemUI-only status bar scanning (`BarRules.isStatusBarPackage` in `StatusBarScan.scan`), strip-on-view color sampling (`ColorReader` / `noteOnView`), configuration-change filtering (`BarRules.afterConfig`), and cheaper placing (`lookInputs`, `chipInputs`, `measureAgain`, guarded trace strings).

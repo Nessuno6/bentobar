@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.meridian11.books.bentobar"
-        minSdk = 34
+        minSdk = 37
         targetSdk = 37
         versionCode = 35
         versionName = "2.3.1-notch.1"
