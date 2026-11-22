@@ -1,5 +1,100 @@
 # Changelog
 
+## 2.3.1 (2026-11-21)
+
+- **A calendar read that fails keeps the last reading.** A query that throws or gives no cursor, and an attendee read
+  that fails while there is a reading that had its attendees (up to the third such read in a row), now count as
+  failures: `Calendar` keeps what it had and reads again in two
+  minutes, and whoever waits in `whenLoaded` is told at once. Up to 2.3.0 such a read replaced a good one for 15
+  minutes. The provider's changes are read once they settle (`items/ReadAgain.kt`: 2 s quiet, at most 10 s into a
+  sync), the retry on the same delayed read. `Meetings.once` and `verdicts` take two occurrences as one event's copies
+  only on two calendars and with the same call link where both have one. `CallLinks` drops a link over 2,048
+  characters, and `Chips.update` survives a chip Android refuses.
+- **`Refresher`:** a load asked for while one that a `forget` overtook was running still follows it (Track's ask
+  after a new flight).
+- **The status bar is SystemUI's.** `StatusBarScan.scan` fetches a candidate window's root alone and reads its tree
+  only if its package is `com.android.systemui` (`BarRules.isStatusBarPackage`); another app's window in that shape is
+  passed over while it is listed.
+- **The bar's colours only while a strip is on view.** `ColorReader` counts a strip shown but not measured yet as
+  nothing drawn, and the readings owed start 250 ms after the first strip is on view (`noteOnView`).
+- **Configuration changes.** `BarRules.afterConfig`: a change of only the input devices or the SIM rescans the bar and
+  leaves an open popup and the colours alone; anything else as before.
+- **Cheaper placing.** `applyLook` and `Chips.update` run only when what they read of the layout changed
+  (`BarRules.lookInputs`, `chipInputs`); a ‹ coming or going places the bar again from the reading it has; an
+  invisible strip asks for a measure only when it has something to draw (`StripContent.measureAgain`); the trace
+  string is built only while tracing. A main-thread call into SystemUI over 250 ms is logged by kind and length.
+- **Pointers and keys.** `ClickGesture` keeps to the pointer whose press it is; a second finger is nothing to it.
+  Delete, Backspace and Ctrl+D act once per press (`Binding.once`). `MenuMotion.blocks`: a divider that ends a card is
+  a block of its own (`DropColumn` threw for it).
+- **Kept text.** `Store.asideIds`: a layout set aside at `open` names its items until Put back or discard, and
+  `ItemType.ids()` counts them, so no sweep deletes their notes or flights. `Undo.idsOf` reads the layout and Undo's
+  hold under one lock, `undo` holds while it writes, and a change a sweep found unheld is not offered again
+  (`lapsed`). A failed `meetings.json` write keeps the old file.
+- **Online.** `AirRules.read` takes only finite numbers within range (a "NaN" in a reply threw in the menu).
+  `HttpTransport.retryAfter` reads the header only on a 429 or a 503, a 429 with 0 holds the default 10 s, and one
+  reply holds a service for an hour at most. `FlightRules.guessed` (loose times, not a timetable): landed and over by
+  the service's state, by the clock only 14 hours (`GUESS_OFF`) past the usual three, the landed hour from `heardAt`. `FxRules`: four significant digits below 1.
+- **Items.** `Fmt.percent` floors with a tolerance (29%, not 28%). `TimerClock.wheel`: down over no timer does
+  nothing; `BrightnessRules.wheel` is null where the value would not change. Countdown `holds`. Screen time:
+  `ScreenTimeRules.every` (10 minutes, 1 after a return), from API 35 `UsageEventsQuery` with the event types it
+  counts. Notification icons: `NoticesRules.drawn`, a URI or data icon is the bell, never loaded. Sound caches the
+  stream's maximum per showing; Heat samples the CPU only while its menu is open (`CpuLoad.current`). The microphone
+  mute BentoBar holds is followed by a not-exported receiver of `ACTION_MICROPHONE_MUTE_CHANGED`. `ClockAnchor.stale`:
+  a timer or keep awake from an earlier boot is anchored again once the new boot is five minutes old; `pause` and
+  `add` check first.
+- **Logs.** `Env.launch` logs an intent's action and scheme and an exception's kind; the ticker's failure lines carry
+  a type's exception as its kind and frames only (`ItemGuard.forLog`).
+
+## 2.3.0 (2026-11-16)
+
+- **Which events are meetings, in one place** (`Meetings.judge`). Every event read gets one verdict, the first that
+  applies: a hidden calendar, canceled (`Events.STATUS`, now read: a plain canceled event comes back from the
+  provider's Instances like any other), declined, a task, all-day, a calendar the user can't change, a calendar
+  unticked in Setup, someone else's, a word in its title, free, an invitation not answered, with others, and with
+  only the user (never, with a call link, or always a meeting). The first four show nowhere; the rest show in the
+  month view, and only "with others" and the chosen kinds of "only the user" are meetings.
+- **Whose event it is.** The user is every account a calendar on the device is synced with; an own calendar (primary,
+  or owned by its account) has the user on every event; a person is an attendee who is no resource by
+  `ATTENDEE_TYPE` and no address of the calendar service's (a room whose type wasn't synced, a calendar invited as a
+  guest). An event with other people that the user is not on (no own calendar, the user neither a guest nor the
+  organizer) is someone else's: a colleague's meeting on a team calendar, a colleague's own block. Before, the user
+  was taken to be the calendar's owner, which on a shared calendar is the calendar itself, so every attendee was
+  someone else, and a call link skipped the attendee read altogether. Known limit: an event the user makes on a
+  shared calendar without inviting themselves can't be told from a colleague's.
+- **The user's own answer** (`Meetings.answer`, `Meetings.verdicts`). On a calendar not the user's own,
+  `SELF_ATTENDEE_STATUS` is that calendar owner's answer: declined and not answered are read from the user's own
+  attendee row (`ATTENDEE_STATUS`, now read), and where the event is also on an own calendar (the same start, end and
+  title), that copy's verdict stands for the others, one that shows it nowhere too. So a meeting declined, not answered
+  or marked free on the user's calendar no longer counts through its copy on a team or colleague's calendar the user
+  can edit. On an own calendar an outside organizer is someone else only when the event has attendee rows: a booking
+  added from a file (a train, a dentist, a concert) lists nobody and is an event with only the user, as in 2.2 (a
+  webinar of that kind still counts by its call link).
+- **The meeting inside a long one** (`Meetings.pick`). The one on now (of several, the one that began last), else the
+  next; a next one that begins before the current one ends takes over at the lead (the item's "Show when", the
+  chip's 15 minutes). Before, the first meeting that had begun stayed until it ended, so a 14:00 meeting inside a
+  13:00 to 17:00 workshop never showed. The chip and Live activity pick from every meeting not ended, so a 03:05
+  meeting gets its chip at 02:50. `Meetings.once` counts one meeting on two calendars once, the own calendar's copy.
+- **Setup › Calendar events** (`data/MeetingChoices.kt`): the calendars (unticked ones are kept by account and owner,
+  not by row id), events with only you, invitations not answered, events marked free (now off by default: a fix),
+  and words that leave a title out (whole words, `Meetings.hasWord`; up to 20 of 80 characters, said under the field,
+  and a longer one is dropped whole, never kept cut). One choice for the install, in the no-backup directory beside
+  the online switches: no part of the layout, Copy settings or a backup; written on a background thread. A change is
+  judged again from what was read; only a calendar ticked again reads the provider again, for its attendees. `CheckList` and
+  `TextSetting` (saved once typing pauses for a second or the focus goes) are the window's new controls. The list of
+  calendars follows the provider while it is shown and is read again when the window comes back.
+- **Next meeting's options**: In the bar (title and time, or the time alone), Looks ahead (today, or any day: then a
+  later day's meeting with its weekday or date, `EventText`), and a line that sends you to Setup for which events
+  count (`LocalTurnTo`, in the window, never by an intent). Longest title shows only with a title in the bar. Live
+  activity says a meeting as the first Next meeting item does (`EventText.live`): with the time alone, no title. Next
+  meeting is now `discreet`: debug output says how long its text is, and a failure is logged by its kind.
+- **The month view lists meetings** with Join and Directions; it left them out before.
+- **Debug**: `./bento debug event stage NAME` (or `calendar stage NAME`; `demo`, `solo`, `room`, `shared`,
+  `unanswered`, `free`, `workshop`, `link`, `allday`, `gone`, `words`) stages a made-up calendar through the real
+  rules and choices, `event off` ends it, and `event check` reads today and tomorrow of the real calendar and prints
+  what the rules made of it in counts, never a title, an address or a calendar's name. `./bento debug` prints an
+  answer of several lines whole.
+- The calendar's two failure lines log the exception's kind, not its message (it can quote a selection).
+
 ## 2.2.1-notch.7 (2026-11-16)
 
 - **Pairing card (`ui/LinkCard`, `LinkActivity.showCard`, `Link.scan` / `Link.linkTo`):** BentoBar's own device list in place of Google's picker, a One UI card over the screen blurred behind it (`SemBlur` on Galaxy devices, Android's cross-window blur elsewhere, else a dim); "Other devices" and a scan that can't run open Google's picker.

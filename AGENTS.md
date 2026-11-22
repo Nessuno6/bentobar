@@ -32,7 +32,7 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
   - `bar/StatusBarScan.kt`: the edge of the window reading: the window list as `WindowFact`s (kind, id, bounds) and
     the status bar window's node tree as `BarNode`s, for `BarRules`, and the status bar's screenshot (`shoot`).
   - `bar/BarRules.kt`: what those facts mean, pure and unit-tested: which window is the status bar (TYPE_SYSTEM at
-    y=0), the free area (the `DesktopStatusBarSpacer` node on Googlebook OS, else the widest gap), and `decide`: whether the
+    y=0, whose root is SystemUI's: `isStatusBarPackage`), the free area (the `DesktopStatusBarSpacer` node on Googlebook OS, else the widest gap), and `decide`: whether the
     strip shows, why not, what covers it, what to read. `arrange` is the one rule of room: which areas have a strip, where
     and how wide (`lane` is an area's room, `middleLeft` where a Middle strip stands in it; `ArrangeTest`), and
     `BarController.place` only carries it out. `BarController.check` collects the facts, asks, and does the
@@ -66,7 +66,8 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
     drag, a finger's tap, swipe and long hold, a press that is taken away) are in `bar/SliderMath.kt`,
     pure and unit-tested; change the rules there, not in the pointer loop.
     A press on an item is `bar/ClickGesture.kt`, pure and unit-tested like `SliderGesture` (a click, the menu when a finger
-    holds still for the system's long-press time, a drag, what the system takes away). The strip's order is forced left to
+    holds still for the system's long-press time, a drag, what the system takes away; a press is its pointer's: another
+    finger going down, moving or lifting is nothing to it). The strip's order is forced left to
     right in every language (`Strip`); only inside an item does the real direction hold; `StripDrag` says where a drag lands.
     The route line an item can have in its icon's place is the same line with a plane on it and no
     pointer (`ItemState.route`: `RouteTrack` draws it, `SliderMath.route` says where its parts stand,
@@ -99,6 +100,9 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
     One exception: `DisplaysItem`'s display listener also lives while "Keep awake while connected" is in force (an
     item has it on and the service is up, `DisplaysItem.follow`), sampled or not. That option is a
     promise about the screen staying on while the bar is hidden, so the bar hiding must not end it.
+    A second: while BentoBar holds its own mute of the microphone (`MuteKeeper.ours`), a receiver of
+    `ACTION_MICROPHONE_MUTE_CHANGED` (not exported) lives, sampled or not, so that the user undoing that mute while the
+    bar is hidden makes it no longer BentoBar's; it goes with the mute.
     The Network menu's Addresses section is `LinkWatch` (the active network's link from ConnectivityManager,
     kept by a callback on the default network between `onLive()` and `onIdle()`) on the pure `LinkRules`; `LinkSamples` stages one.
   - `items/Refresher.kt` is `Calendar`'s way of loading as one class (a background thread, one load
@@ -162,7 +166,7 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
     address. `Http.get` refuses unless the service is switched on, the layout has an item that uses it
     and something that shows items is on screen, and never runs on the main thread. A `Request` holds no key:
     `Http.key` is wired in `Env` and `HttpTransport` adds it, so no item's code ever holds one. A `Request` prints as host and path only, and no exception leaves `HttpTransport`.
-    One 429 or Retry-After holds the whole service (`Http.get` answers for it), and what the transport would refuse is `Why.REFUSED`, counted as nothing sent.
+    One 429, or a Retry-After on a 429 or a 503, holds the whole service, for an hour at most (`Http.get` answers for it), and what the transport would refuse is `Why.REFUSED`, counted as nothing sent.
   - `items/OnlineBase.kt` and `items/Places.kt` are what the online items share: the reply-to-failure mapping (`Failures`), the pace (`Pace`), the states (`Status`), the staged sample (`Staged`), what a place is. Another service
     is a load, a rules file and a menu file; `OnlineServiceContract` in the tests gives it the failure tests.
   - `data/LayoutIntents.kt`: what a command does to an item (`show`, `hide`, `putIn`, `setWhenActive`, and for
@@ -178,16 +182,18 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
     under the line the items that wait for their rule, or with ‹ everything behind it), `canGoBelow`, `standing`, and
     `fresh`, the item a type's + makes (a type's defaults are the same every day, so a new Countdown has no date and
     says "Set a date"). What a type keeps for an item outside the layout (Flight: the flight it follows; Prompter: its
-    notes) stays while the item is in the layout or `Undo` can bring it back, and goes once it no longer can
+    notes) stays while the item is in the layout, `Undo` can bring it back, or a layout set aside has it
+    (`Store.asideIds`, until Put back or discard), and goes once none of them holds it
     (`Undo.letGo` calls `forgetOwn`; the bar's own menu has no Undo, so its Remove is `Undo.removeForGood`, at once),
     or at the next start (a type's own sweep, for what a pasted layout or an ended process left). Undo can bring an
     item back until the next change or until the settings window is closed, whichever is first: `Undo.end`, which
     `MainActivity` calls at the first step of its way out that says it is finishing (`closing`: not when it is made
     again for a rotation or a new size, not when it is only left; `UndoWindowTest`), lets the kept change go as a
     next change does, so a removed item's kept text does not wait for a change days later and a window opened
-    afterwards takes nothing back. A type's sweep runs on its own thread and asks `Undo.held`, which also counts the
-    layout a change that is being made started from (`Undo.pending`, set in `change` from before the write until the
-    change is kept): an item is never in no layout and in no kept change at once.
+    afterwards takes nothing back. A type's sweep runs on its own thread and asks `ItemType.ids()`, which reads the
+    layout and Undo's hold as one under Undo's lock (`Undo.idsOf`) and also counts the layout a change that is being
+    made or undone started from (`Undo.pending`, set in `change` from before the write until the change is kept): an item
+    is never in no layout and in no kept change at once, and a change Undo once held no more is not offered again.
     `stripPlan` (in `Model.kt`) is the one choice of what an area's strip and the settings preview show (`StripPlanTest`).
   - `data/`: `Model.kt` (`BarConfig`, `ItemConfig`, `Section`…) and `Store` (JSON in
     SharedPreferences, a process-wide StateFlow shared by the service and settings; `Store.open` takes a `Prefs`, so a test
@@ -216,7 +222,14 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
     holds what belongs to one install and never travels: whether each online service is switched on
     and the user's own key for one, in a file in Android's no-backup directory (so in no backup, no
     device transfer and no copied layout). `Kept.kt` keeps small texts there too (a service's last
-    answer, as the app's own model, never the reply as it came).
+    answer, as the app's own model, never the reply as it came). `MeetingChoices.kt` is the same for which calendar
+    events count as meetings (Setup's "Calendar events": the calendars unticked, by `Meetings.Cal.ident`, events with only
+    the user, invitations not answered, events marked free, words that leave a title out): one choice for the install,
+    since every Next meeting item, the chip and Live activity must agree, in `meetings.json` beside `online.json`. A change
+    is in memory at once and written on a background thread (`MeetingChoices.writer`); `Calendar.choicesChanged` judges
+    the last reading again and reads the provider again only for a calendar ticked that was unticked at that reading
+    (its attendees weren't read; a word, a switch or "Events with only you" changes nothing that is read). Calendars and
+    words are personal, so none of it travels.
   - `ui/`: `MainActivity` (the settings window: its pages inside `Shell`), `Shell` (the header row directly under the
     system's caption, on the caption's ground: mark and name, the tabs, the status line, and one control, the "Show in
     status bar" switch or Turn on while BentoBar is off, neither on Setup; nothing is ever placed in the caption. Below
@@ -265,7 +278,16 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
     with an absolute offset, or from right to left it hangs mirrored across the window), `LookPage`, `SetupPage` and `AboutPage` (each one column of cards, 760 dp at most, built
     from `PageKit`: `PageColumn`, `PageSection`, `PageCard`, `SettingRow`, `ChoiceSetting`, `SwitchSetting`; About has two
     columns from 760 dp of window. Setup's first card is Turn on, or "On" once BentoBar is; a permission's row says
-    Allowed with a quiet way back, and one Android won't ask for again says so in its own row. `SetupRules`, pure, says
+    Allowed with a quiet way back, and one Android won't ask for again says so in its own row. After the permissions,
+    "Calendar events" (`CalendarEventsCard`, stateless, so a test gives it made-up calendars): the calendars the user can
+    change under their accounts (a `CheckList`; the heading only with more than one account), Events with only you,
+    two switches and "Leave out titles with" (`TextSetting`, which keeps what is typed while it has the focus, like
+    `TextRow`, and saves it once typing pauses for a second, the focus goes or the field leaves the page: never a word
+    half typed; its help says the limits, 20 words or phrases of 80 characters, and a longer one is dropped whole, never
+    kept cut); it is there whether or not a Next meeting item is. Its calendars are read off the main thread when it is
+    composed, when calendar access changes, when the window comes back (`Setup.returns`) and, while it is shown, when the
+    provider's calendars change (`Calendar.watchCalendars`, an observer that lives only as long as the card). An item's options turn the window to a page with
+    `LocalTurnTo` (Next meeting's "Open Setup"), in the process and never by an intent. `SetupRules`, pure, says
     when the window goes to Bar by itself: only at the moment BentoBar comes on while Setup is shown),
     `Disclosure` (the accessibility disclosure and consent Google Play requires, and the one list of
     what the service does that Setup shows too; `ConsentRules` says when it comes up. It is a page under the Setup tab,
@@ -279,7 +301,8 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
     palette for the few pieces an item's options share with its popup), and `PaletteContrastTest` holds its pairs to the
     contrast they need. The bar's popups keep the device's colors (`BentoBarTheme`). The settings window's own controls are in `Controls`
     (`Segment`, equal parts or each as wide as its words; `SwitchMark`, `BentoButton`, `FilterField`, `Keycap`, `RadioList`,
-    `BentoField`, `BentoSlider`) and `Notice`
+    `CheckList` (`RadioList`'s look with a box that is ticked or not, and a dot in each row's colour), `BentoField`,
+    `BentoSlider`) and `Notice`
     (`NoticeLine`; an amber notice's one button is `ButtonKind.WARN`, and what deletes is `ButtonKind.DANGER`: a
     tonal button's shape and height on a ground of the danger colour over the card (`DANGER_VEIL`, the trash's with a
     row over it), its words and glyph in that colour, the control's veil in the same colour on it under the pointer and
@@ -358,6 +381,23 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
   - `items/Holders.kt`: who needs what only runs while someone does. `Calendar` is held by the Calendar and Next meeting
     items while they are live and by the Live Update chip while it can be a meeting's (it works with the service off, so it
     can't hang on `onLive` alone); a minute after the last holder left it stops observing the provider and forgets what it read.
+    The provider's changes are read once they settle (`items/ReadAgain.kt`: 2 s quiet, at most 10 s into a sync).
+  - `items/Calendar.kt` reads the provider (`read`: the calendars, the occurrences, and in chunks of 400 the attendees of
+    the events `Meetings.asksAttendees` names) into a `Meetings.Reading`; everything after that is `items/Meetings.kt`, pure
+    and unit-tested: `judge` gives each event one verdict, the first that applies (a hidden calendar, canceled, declined,
+    a task, all-day, read-only, an unticked calendar, someone else's, a word, free, unanswered, with others, only the
+    user; declined and unanswered are the user's own `answer`), `verdicts` judges one event on two calendars as its copy
+    on an own calendar (a declined own copy takes the shared one with it), `events` keeps those that show at all and is
+    judged again from the last reading when the choices change, `pick` says which meeting the bar stands on (the one on now, else the
+    next; one that starts inside a long one takes over at the lead), `once` counts one meeting on two calendars once,
+    `listed` is Next meeting's menu, `words`/`hasWord` are "Leave out titles with" (whole words), and `report` is
+    `event check`'s counts. `meetings(now)` (today, to 03:00) and `upcomingMeetings(now)` (everything not ended: the chip,
+    Live activity, "Any day") go through `once`; the month view shows every event that shows (`Verdict.event`).
+    `items/EventText.kt` is what Next meeting says in the bar (title and time, or the time alone; a later day by its
+    weekday or date) and in Live activity (`live`: as the first Next meeting item has it, so no title with the time
+    alone), pure with its words from outside. `items/EventSamples.kt` holds the made-up sets a test stages:
+    while one is staged `Calendar.events` is the set as the real rules and choices judge it, `allowed()` is true and the
+    provider is not read. Nothing of the calendar is logged: `PrivateTextTest` allows two failure lines, by their kind.
   - `tile/Tiles.kt`: the BentoBar, Keep awake and Timer tiles.
   - `util/`: `Sym.kt` (generated), `Ui.kt` (fonts, `SymIcon`), `Fmt.kt`, `Dates.kt` (locale-aware dates
     and times from skeletons), `Now.kt` (the clock for ages and countdowns, which a debug build's
@@ -431,8 +471,8 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
   Also `now +3h|+90m|off` (moves the clock everything newer reads, `util/Now`), `net [reset]` (requests
   sent per host, and whether each service may be asked right now), `online weather|fx|flights|stocks on|off`,
   and `TYPE …` or `item TYPE …`, which go to that item type's own `debug(args)`. What a hook prints
-  is logged: no hook takes or prints a key, and a type marked `discreet` prints no title (`state media`
-  and `state flight` print the text's length).
+  is logged: no hook takes or prints a key, and a type marked `discreet` prints no title (`state media`,
+  `state flight` and `state event` print the text's length).
   The types' own hooks stage what a test can't make happen: `media stage playing|paused|none|notitle|two|
   live|noaccess|starting|long|wide|emoji|rtl|off`; `devices stage mouse=15 keyboard=40c stylus=unknown`
   and `devices off`; `heat stage 0..6`, `heat level 0.84`, `heat temp 41.3`, `heat off`; `weather stage
@@ -445,6 +485,9 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
   meanwhile, closing the menu drops them as it does the real ones, and `several 2` is the second of them,
   followed; bare `flight` prints the question and the rows);
   `sound fixed on|off`; `notices stage three|many|progress|none|noaccess`; `live stage several`;
+  `event stage demo|solo|room|shared|unanswered|free|workshop|link|allday|gone|words` and `event off` (also as
+  `calendar …`: one calendar; a made-up set through the real rules and choices, `demo` for pictures), `event check` (the
+  real calendar's today and tomorrow in counts: no title, address or calendar name), bare `event` (what is loaded, by verdict);
   `focus stage ready|running|endless|noaccess`; `sun stage evening|night|polar|nozone`; `progress stage
   morning|evening|yearend`; `breaks stage early|due`; `network stage wifi|ethernet|vpn|ipv6|offline` and `network off`
   (the Addresses section's rows; stage one before capturing the menu, so that no real address is in a picture). Each
@@ -592,9 +635,33 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
 - **A weather service's hourly chance of rain is for the hour that ends at its time** (Open-Meteo:
   "preceding hour"), while the temperature and the weather code are of that instant. The rain rule
   names the hour the chance is for, and an hour's cell takes its chance from the entry after it.
+- **Whose calendar event it is.** On a shared calendar `OWNER_ACCOUNT` is the calendar's own address (a group address,
+  a colleague's), and `SELF_ATTENDEE_STATUS` is the calendar owner's answer, so taking the owner for the user (as up to
+  2.2) made every attendee of a team calendar's event "someone else" and a colleague's meeting a meeting of the user's.
+  The user is every account a calendar is synced with (`Meetings.mine`, not a `LOCAL` one); an own calendar (`IS_PRIMARY`,
+  or owned by its account) has the user on every event, which keeps an alias safe; a room is no person, by
+  `ATTENDEE_TYPE` or, where the type wasn't synced, by its `resource.calendar.google.com` address (a calendar invited
+  as a guest is `group.calendar.google.com`). Other people and the user not on it: someone else's, whatever the
+  choices. The provider does not say who made an event, so a meeting the user makes on a shared calendar without
+  inviting themselves is someone else's: the known limit, said in the notes. A call link no longer spares the attendee
+  read (a colleague's meeting with a link was a meeting with nobody asked). Since `SELF_ATTENDEE_STATUS` on another's
+  calendar is its owner's answer, the user's answer there is the user's own attendee row (`ATTENDEE_STATUS`,
+  `Meetings.answer`), and where the event is also on an own calendar (the same start, end and title on another calendar, and the same call
+  link where both have one) that copy's verdict
+  stands for the others (`Meetings.verdicts`): an invitation declined, not answered or free on the user's calendar is
+  that on a team calendar the user can edit too. On an own calendar an outside organizer is another person only when
+  the event has attendee rows: a booking added from a file (a train, a dentist, a concert, organizer `noreply@…`) lists
+  nobody, and is an event with only the user (a webinar of that kind still counts by its call link, as in 2.2). A plain canceled event (`eventStatus` 2,
+  an invitation the organizer canceled) comes back from Instances like any other (seen on the API 34 and 37
+  emulators): `judge` drops it. The grown projection (`CALENDAR_ID`, `STATUS`, `AVAILABILITY`, `ORGANIZER`) ran there
+  too; a column a device lacks would throw, as would a query that gives no cursor: the last reading stays, the read is
+  tried again in two minutes, and `event check` says `query=failed:…`. A read whose attendees failed replaces only a reading whose attendees failed too, or from the third such read in a
+  row (`Meetings.Reading.replaces`).
 - **Least privilege** (user feedback): the accessibility config subscribes only to
   `typeWindowsChanged`. No content events, key filtering or motion events. The status bar is the only
-  window whose content code reads; of any other window it reads the type and where it is. One title is read, and
+  window whose content code reads; of any other window it reads the type and where it is, and of one in the status
+  bar's shape whose package its root names, fetched alone (`BarRules.isStatusBarPackage`: any but SystemUI's is
+  passed over, and nothing under its root is fetched). One title is read, and
   only that: `BarService.check` skips the screenshot preview by the title of a large TYPE_SYSTEM window (the title is
   compared, never logged or kept; `WindowReadingTest` allows `.title` on a window nowhere else, and the `windows` debug
   hook that lists titles is in `src/debug`). The accessibility API (nodes, windows, screenshots) is named only in
@@ -647,7 +714,8 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
 - **Time:** timers and keep awake store wall-clock times (they survive a restart) plus a `ClockAnchor`
   (elapsed realtime and the boot count), so a clock change moves the deadline with it instead of
   ending it early; the timer alarm is `ELAPSED_REALTIME_WAKEUP`, armed again in `Timers.init` (alarms
-  don't survive a reboot). Live Update calls (`setRequestPromotedOngoing`, `setShortCriticalText`) are
+  don't survive a reboot). A running one set before a restart is anchored again once the new boot is five minutes old
+  (`ClockAnchor.stale`), so later clock changes are followed; Pause and adding time check first. Live Update calls (`setRequestPromotedOngoing`, `setShortCriticalText`) are
   API 36.1: behind `Notify.liveUpdates`, since minSdk is 34.
 - **A finished timer's notification is what rings.** The `alerts` channel carries the alarm tone, so the ring lasts while
   the notification (`Notify.ID_DONE`) is up. `Timers.stop` cancels it, which is how the item's Stop ends a ring; the Clock
@@ -702,7 +770,7 @@ Name no other company's app as a model or a comparison, in the app or anywhere h
   screen, and for screen capture. So: no invisible or 1×1 overlays (keep awake is
   FLAG_KEEP_SCREEN_ON on the visible strip, a screen wake lock only while the strip is hidden or
   empty, never on the lock screen; an empty strip's window is made invisible), status bar
-  screenshots only on a change and only while the strip shows (never on a timer), every overlay visible and there because the user asked for it, and no adb hooks in release.
+  screenshots only on a change and only while a strip is on view, measured with something drawn (never on a timer), every overlay visible and there because the user asked for it, and no adb hooks in release.
   With areas the same holds for each window: an area in use that draws nothing right now keeps its window with an
   invisible root, as the one strip always did (it is still measured, and shows as soon as it has something to draw); an
   area with no such item has no window at all. That is up to three such windows where there was one: the device

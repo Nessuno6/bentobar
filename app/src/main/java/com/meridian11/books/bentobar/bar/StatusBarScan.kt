@@ -14,7 +14,7 @@ internal fun Box.rect() = Rect(left, top, right, bottom)
 /**
  * Reads the accessibility tree into plain facts for [BarRules]. The status bar is the only window whose content is
  * read (SystemUI's status bar window, as [BarNode]s, which become a [BarSnapshot]); of any other window, only its kind,
- * its id and where it is ([WindowFact]).
+ * its id and where it is ([WindowFact]), and of one in the bar's place whose root it is.
  */
 object StatusBarScan {
     /**
@@ -34,8 +34,13 @@ object StatusBarScan {
     fun corner(display: android.view.Display?): Int? =
         runCatching { display?.getRoundedCorner(android.view.RoundedCorner.POSITION_TOP_LEFT)?.radius }.getOrNull()?.takeIf { it > 0 }
 
-    /** What a scan brings back: the plain [snapshot], and the live spacer node (a cheap "did anything move?" check for [BarController]). */
-    class Scanned(val snapshot: BarSnapshot, val spacerNode: AccessibilityNodeInfo?)
+    /**
+     * What a scan brings back: the plain [snapshot], and the live spacer node (a cheap "did anything move?" check for
+     * [BarController]). No snapshot: the window is not SystemUI's ([notTheBar]), and nothing under its root was fetched.
+     */
+    class Scanned(val snapshot: BarSnapshot?, val spacerNode: AccessibilityNodeInfo?) {
+        val notTheBar get() = snapshot == null
+    }
 
     /** What [BarRules] may know of [w]: its kind, its id and where it is. */
     fun fact(w: AccessibilityWindowInfo): WindowFact {
@@ -52,8 +57,15 @@ object StatusBarScan {
     /** [edge]: what each end of a phone's bar keeps clear, in px (`BarRules.parse`); null for one bar height. */
     fun scan(w: AccessibilityWindowInfo, cutouts: List<Box> = emptyList(), edge: Int? = null): Scanned {
         val bar = Rect().also { w.getBoundsInScreen(it) }.box()
-        // One round trip: prefetch the (small, ~35 node) tree instead of an IPC per getChild().
-        val root = root(w) ?: return Scanned(BarRules.parse(w.id, bar, emptyList(), cutouts, edge), null)
+        fun noTree() = Scanned(BarRules.parse(w.id, bar, emptyList(), cutouts, edge), null)
+        // Whose window it is, from its root alone, fetched with nothing under it: another app's window in the bar's place
+        // (an overlay the list calls a system window) is not walked, and its tree is never fetched.
+        val owner = root(w, 0) ?: return noTree()
+        if (!BarRules.isStatusBarPackage(owner.packageName?.toString())) return Scanned(null, null)
+        // Then the tree in one more round trip: the root again (a window's root is never the node cache's), with the
+        // (small, ~35 node) tree prefetched, instead of an IPC per getChild().
+        val root = root(w, AccessibilityNodeInfo.FLAG_PREFETCH_DESCENDANTS_DEPTH_FIRST or
+            AccessibilityNodeInfo.FLAG_PREFETCH_UNINTERRUPTIBLE) ?: return noTree()
         var spacerNode: AccessibilityNodeInfo? = null
         val nodes = ArrayList<BarNode>()
         val stack = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
@@ -85,15 +97,10 @@ object StatusBarScan {
      * BentoBar's strip ends right before them. Without the system icons, the widest gap. The apps' row
      * ([APPS]) is the node a light check refreshes: it grows as apps open.
      */
-    // One round trip: prefetch the (small, ~35 node) tree instead of an IPC per getChild().
-    private fun root(w: AccessibilityWindowInfo): AccessibilityNodeInfo? = w.getRoot(
-        AccessibilityNodeInfo.FLAG_PREFETCH_DESCENDANTS_DEPTH_FIRST or
-            AccessibilityNodeInfo.FLAG_PREFETCH_UNINTERRUPTIBLE,
-    )
-
     fun scanTaskbar(w: AccessibilityWindowInfo): Scanned {
         val bar = Rect().also { w.getBoundsInScreen(it) }
-        val root = root(w) ?: return Scanned(BarSnapshot(w.id, bar.box(), bar.box(), null, BarRules.NO_TREE), null)
+        val root = root(w, AccessibilityNodeInfo.FLAG_PREFETCH_DESCENDANTS_DEPTH_FIRST or
+            AccessibilityNodeInfo.FLAG_PREFETCH_UNINTERRUPTIBLE) ?: return Scanned(BarSnapshot(w.id, bar.box(), bar.box(), null, BarRules.NO_TREE), null)
         var tray: Rect? = null
         var clock: Rect? = null
         var apps: AccessibilityNodeInfo? = null
@@ -140,6 +147,9 @@ object StatusBarScan {
         if (bar.right - cursor > best.width()) best = Rect(cursor, bar.top, bar.right, bar.bottom)
         return best
     }
+
+    /** The one way to a window's root. [prefetch] says what comes with it: 0 for the root alone. */
+    private fun root(w: AccessibilityWindowInfo, prefetch: Int): AccessibilityNodeInfo? = w.getRoot(prefetch)
 
     /**
      * The screenshots' answers, on one thread for the whole process, never shut down: a controller that stops must not
