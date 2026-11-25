@@ -43,13 +43,13 @@ import com.meridian11.books.bentobar.R
 import com.meridian11.books.bentobar.data.ItemConfig
 import com.meridian11.books.bentobar.data.Store
 import com.meridian11.books.bentobar.items.DevicesRules.Device
-import com.meridian11.books.bentobar.ui.InfoRow
 import com.meridian11.books.bentobar.ui.MenuCard
 import com.meridian11.books.bentobar.ui.MenuDivider
 import com.meridian11.books.bentobar.ui.MenuEntry
 import com.meridian11.books.bentobar.ui.MenuNote
 import com.meridian11.books.bentobar.ui.MainActivity
 import com.meridian11.books.bentobar.ui.Meter
+import com.meridian11.books.bentobar.ui.SmallIconButton
 import com.meridian11.books.bentobar.ui.rememberTick
 import com.meridian11.books.bentobar.util.Fmt
 import com.meridian11.books.bentobar.util.Now
@@ -298,8 +298,17 @@ object DevicesItem : ItemType("devices", R.string.item_devices_title, Sym.MOUSE,
                 val now = System.currentTimeMillis()
                 cases.forEach { c ->
                     val level = DevicesRules.percentText(c.level)
-                    InfoRow(stringResource(R.string.devices_case_of, c.name),
-                        if (now - c.at < DevicesRules.CASE_FRESH_MS) level else stringResource(R.string.devices_case_seen, level, Fmt.duration(now - c.at)))
+                    val value = if (now - c.at < DevicesRules.CASE_FRESH_MS) level
+                        else stringResource(R.string.devices_case_seen, level, Fmt.duration(now - c.at))
+                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.devices_case_of, c.name), style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(value, style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                                fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                        SmallIconButton(Sym.CLOSE, stringResource(R.string.devices_case_remove, c.name)) { Cases.forget(c.name) }
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -320,12 +329,18 @@ object DevicesItem : ItemType("devices", R.string.item_devices_title, Sym.MOUSE,
                     MenuNote(stringResource(R.string.link_linked, peer))
                     MenuEntry(Sym.LINK, stringResource(R.string.link_unlink)) { Link.unlink() }
                 }
-                Link.connecting && peer != null -> MenuNote(stringResource(R.string.link_connecting, peer))
-                // Links again to the device last linked by itself; the picker only when there is none, or it isn't found.
-                // (The Device link tile is the picker's way to another device.)
-                else -> MenuEntry(Sym.LINK, if (peer != null) stringResource(R.string.link_again, peer) else stringResource(R.string.link_open)) {
+                Link.paused && peer != null -> {
+                    MenuNote(stringResource(R.string.link_paused, peer))
+                    MenuEntry(Sym.LINK, stringResource(R.string.link_unlink)) { Link.unlink() }
+                }
+                (Link.connecting || Link.waiting) && peer != null -> {
+                    MenuNote(stringResource(R.string.link_waiting, peer))
+                    MenuEntry(Sym.LINK, stringResource(R.string.link_unlink)) { Link.unlink() }
+                }
+                // Opens Google's Cross-Device picker directly, the same way the Device link tile does.
+                else -> MenuEntry(Sym.LINK, stringResource(R.string.link_open)) {
                     host.close()
-                    Link.autolink { Env.launch(Intent(Env.app, com.meridian11.books.bentobar.ui.LinkActivity::class.java)) }
+                    Env.launch(Intent(Env.app, com.meridian11.books.bentobar.ui.LinkActivity::class.java))
                 }
             }
         }

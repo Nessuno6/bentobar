@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.1-notch.2 (2026-11-25)
+
+- **Device link:** removed the custom One UI pairing card (`LinkCard`) so both the **Device batteries** menu and the **Device link** Quick Settings tile open Google's Cross-Device picker directly; fixed channel cleanup on re-link, made **Unlink** stay unlinked cleanly on both sides, and distinguished **Linked** (actively receiving battery updates) from **Waiting** and **Paused for sharing**.
+- **Saved charging cases:** added a remove (`×`) button for each saved charging case in the **Device batteries** popup and enabled **Forget** for saved cases in **Widget settings** (removing them from both widgets and saved cases).
+- **CPU bar width:** single-digit CPU percentages (`0%`–`9%`) are prefixed with a figure space (`\u2007`) so 1-digit and 2-digit readings keep the same width without resizing every second.
+
 ## 2.3.1-notch.1 (2026-11-22)
 
 - **SDK:** set `minSdk = 37` to match `targetSdk = 37` and `compileSdk = 37` (Android 17).

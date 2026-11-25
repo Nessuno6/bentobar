@@ -67,6 +67,19 @@ object DeviceLinkRules {
     /** While not linked, Device batteries looks this often for the device last linked, to link back to it (`Link.follow`). */
     const val FOLLOW_MS = 120_000L
 
+    /** What a side sends as it unlinks, so that the other stops sending until it is asked again (`Link.unlink`). */
+    const val BYE = "bentobar-link bye"
+
+    /** The other side closing the link again within this of the last time waits [RELISTEN_WAIT_MS] before listening again. */
+    const val RELISTEN_GAP_MS = 10_000L
+    const val RELISTEN_WAIT_MS = 15_000L
+
+    /**
+     * A link that heard nothing for [STALE_MS] (three of the other side's messages) since it came up or since its last
+     * message: the other side went away without a word and is looked for again.
+     */
+    fun quiet(now: Long, linkedAt: Long, heardAt: Long): Boolean = now - maxOf(linkedAt, heardAt) > STALE_MS
+
     /** Whether the link gives way now: AWDL is up, or Quick Share is in front (null: no Usage access to tell). */
     fun givesWay(awdl: Boolean, quickShare: Boolean?): Boolean = awdl || quickShare == true
 

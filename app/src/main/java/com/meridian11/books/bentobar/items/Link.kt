@@ -49,8 +49,23 @@ object Link {
      * whichever of them linked first, or both at once.
      */
     @Volatile private var back: RemoteConnection? = null
-    /** The user unlinked: the link stays down until asked again ([follow] doesn't link it). */
+    /**
+     * The user unlinked here: this side sends nothing and shows nothing of the other, but goes on listening, so a tap on
+     * the other device (its card, "Link again") links both at once, as the picker's wake did. Hearing the other side
+     * again ends it.
+     */
     @Volatile private var unlinked = false
+    /** The other side unlinked (it said [DeviceLinkRules.BYE]): nothing is sent to it until it speaks again. */
+    @Volatile private var peerLeft = false
+    /** The last link went quiet once and was registered again; quiet again, the device is looked for anew. */
+    private var requiet = false
+    /** When the link was last registered again after the other side closed it, to hold a loop of closes back. */
+    private var relistenedAt = 0L
+    /** Messages sent and heard, for the log. */
+    private var sends = 0
+    private var heard = 0
+    /** When the link last came up, so that a link the other side never speaks on counts as quiet too. */
+    private var linkedAt = 0L
     /** When [follow] last looked for the device last linked. */
     private var followedAt = 0L
     @Volatile private var status: DeviceLinkRules.Status? = null
@@ -68,7 +83,14 @@ object Link {
     /** The link gave way to AWDL ([DeviceLinkRules.awdl]) and, if this side opened it, opens again once AWDL ends. */
     @Volatile private var yielded = false
 
-    val linked: Boolean get() = connection?.isClosed == false
+    /** Listening: this side is registered for the other's messages, linked or not. */
+    private val listening: Boolean get() = connection?.isClosed == false
+    /** Channel is open and neither side unlinked (may still be waiting for the other side's first message). */
+    private val active: Boolean get() = listening && !unlinked && !peerLeft
+    /** Linked: channel is open and fresh battery data has been heard from the other side. */
+    val linked: Boolean get() = active && status != null && SystemClock.elapsedRealtime() - statusAt <= DeviceLinkRules.STALE_MS
+    /** Waiting: channel is open and listening, but no fresh data has arrived from the other side yet. */
+    val waiting: Boolean get() = active && !linked
 
     /** The other side's devices as rows of Device batteries, besides [own]; none while not linked or when it went quiet. */
     fun devices(own: List<Device>): List<Device> {
@@ -108,6 +130,7 @@ object Link {
         opened = participant
         yielded = false
         unlinked = false
+        peerLeft = false
         start(participant, notifyFailure = true, accepting = false)
     }
 
@@ -121,6 +144,7 @@ object Link {
         opened = participant
         yielded = false
         unlinked = false
+        peerLeft = false
         start(participant, notifyFailure = false, accepting = true)
     }
 
@@ -158,7 +182,7 @@ object Link {
         busy = DeviceLinkRules.givesWay(awdl, share)
         if (busy) busyAt = now
         when {
-            busy && (linked || connecting) -> {
+            busy && (active || connecting) -> {
                 android.util.Log.i(TAG, "${if (awdl) "AWDL is up" else "Quick Share is open"}: the link gives way")
                 drop()
                 yielded = true
@@ -171,7 +195,7 @@ object Link {
                 }
             }
         }
-        if (linked || connecting || yielded) main.postDelayed(awdlWatch, DeviceLinkRules.AWDL_EVERY_MS)
+        if (active || connecting || yielded) main.postDelayed(awdlWatch, DeviceLinkRules.AWDL_EVERY_MS)
     }
 
     private fun watchAwdl() { main.removeCallbacks(awdlWatch); main.postDelayed(awdlWatch, DeviceLinkRules.AWDL_EVERY_MS) }
@@ -179,6 +203,12 @@ object Link {
     private fun start(participant: Participant, notifyFailure: Boolean, accepting: Boolean) {
         val id = ++attempt
         val label = participant.displayName.toString()
+        // Close any previous channel before opening a new one: Play services throws IllegalArgumentException if still registered.
+        main.removeCallbacks(tick)
+        connection?.let { runCatching { it.closeFuture() } }
+        back?.let { runCatching { it.closeFuture() } }
+        connection = null
+        back = null
         peer = label
         connecting = true
         clearConnectTimeout()
@@ -236,6 +266,7 @@ object Link {
         back?.takeIf { it !== reverse }?.let { old -> runCatching { old.closeFuture() } }
         connection = c
         back = reverse
+        linkedAt = SystemClock.elapsedRealtime()
         status = null
         c.registerReceiver(receiver)
         reverse?.registerReceiver(receiver)
@@ -245,22 +276,32 @@ object Link {
     }
 
     /**
-     * Drops the link (Device batteries' Unlink, the tile): it stays down until asked again, sharing or not. The device is
-     * remembered, so the tile links it again with one tap.
+     * Drops the link (Device batteries' Unlink, the tile): tells the other side so it stops too, then closes the
+     * channels and stays unlinked until the user picks a device again.
      */
     fun unlink() {
         yielded = false
         unlinked = true
+        opened = null
         main.removeCallbacks(awdlWatch)
-        drop()
+        val c = connection
+        if (c == null) { drop(); return }
+        // Update the UI at once, tell the other side to drop too, then close the channels.
+        status = null
+        changed()
+        scope.launch {
+            runCatching { c.send(DeviceLinkRules.BYE.toByteArray()) }
+            main.post { drop() }
+        }
     }
 
     /** Links again to the device last linked, without the picker (the tile). False when there is none to ask. */
     fun relink(quiet: Boolean = false): Boolean {
         val participant = opened ?: return false
-        if (linked || connecting) return true
+        if (active || connecting) return true
         yielded = false
         unlinked = false
+        if (!quiet) peerLeft = false
         start(participant, notifyFailure = !quiet, accepting = false)
         return true
     }
@@ -272,7 +313,7 @@ object Link {
      * keep what the other side sent meanwhile. Not after the user unlinked here, nor while Quick Share has the radio.
      */
     fun follow(now: Long) {
-        if (linked || connecting || unlinked || yielded || busy) return
+        if (listening || connecting || unlinked || peerLeft || yielded || busy) return
         if (followedAt != 0L && now - followedAt < DeviceLinkRules.FOLLOW_MS) return
         followedAt = now
         if (known == null && opened == null) {
@@ -304,7 +345,7 @@ object Link {
      * linked, or it wasn't found in time.
      */
     fun autolink(quiet: Boolean = false, onMissing: () -> Unit) {
-        if (linked || connecting) return
+        if (active || connecting) return
         if (!quiet) unlinked = false
         if (relink(quiet)) return
         val name = lastPeer() ?: return onMissing()
@@ -350,44 +391,17 @@ object Link {
         }.onFailure { main.post(giveUp) }
     }
 
-    /** A device the scan found: its name as Google names it, and the handle a link to it is opened with. */
-    class Found(val name: String, internal val token: android.os.IBinder)
-
-    /**
-     * Looks for the user's own devices, for BentoBar's pairing card (`ui/LinkCard`): [onFound] hears the whole list, on the
-     * main thread, each time it grows. Returns what stops the scan, or null when it can't run (no Nearby devices
-     * permission, no Play services).
-     */
-    fun scan(onFound: (List<Found>) -> Unit): (() -> Unit)? {
-        if (!canScan()) return null
-        val client = runCatching { Dtdi.getClient(Env.app) }.getOrNull() ?: return null
-        val seen = LinkedHashMap<String, Found>()
-        var stopped = false
-        val listener = object : com.google.android.gms.dtdi.core.OnScanResultListener {
-            override fun onScanResult(result: com.google.android.gms.dtdi.core.ScanResult) {
-                val devices = result.remoteDevices.mapNotNull { d -> d.deviceName?.takeIf { it.isNotBlank() }?.let { Found(it, d.token) } }
-                android.util.Log.i(TAG, "scan: ${result.remoteDevices.size} device(s), ${devices.size} named")
-                main.post {
-                    if (stopped) return@post
-                    var grew = false
-                    for (d in devices) { if (d.name !in seen) grew = true; seen[d.name] = d }
-                    if (grew) onFound(seen.values.toList())
-                }
-            }
-        }
-        val started = runCatching {
-            @android.annotation.SuppressLint("MissingPermission") // canScan() above
-            val task = client.startOrUpdateDiscovery(emptyList(), com.google.android.gms.dtdi.core.DiscoveryFeature.CROSS_DEVICE_SDK, listener)
-            task.addOnFailureListener { e -> android.util.Log.i(TAG, "scan failed: ${e.javaClass.simpleName}") }
-        }.isSuccess
-        if (!started) return null
-        return { stopped = true; runCatching { client.stopDiscovery() } }
-    }
-
-    /** Links to a device the scan found (the card's tap). */
-    fun linkTo(found: Found) {
-        val client = runCatching { Dtdi.getClient(Env.app) }.getOrNull() ?: return
-        open(ParticipantImpl(found.name, found.token, CorrelationData.createNew(), client))
+    /** Forgets the saved linked device so the menu opens Google's device picker instead of linking to it again. */
+    fun forget() {
+        yielded = false
+        unlinked = false
+        peerLeft = false
+        main.removeCallbacks(awdlWatch)
+        opened = null
+        peer = null
+        known = null
+        looker.execute { runCatching { com.meridian11.books.bentobar.data.Kept.own(KEPT).remove(PEER_NAME) } }
+        drop()
     }
 
     /** Whether the scan [autolink] needs is allowed: Nearby devices' BLUETOOTH_SCAN. */
@@ -420,27 +434,82 @@ object Link {
         override fun run() {
             val c = connection ?: return
             if (c.isClosed) return dropped(c)
+            // The other side's BentoBar can end (Android stops it, a restart) and link again with no word to this side,
+            // whose channels then hear nothing while it still counts as linked, and so never looks again: a link that
+            // stays quiet is dropped, and [follow] finds the device anew with a fresh scan.
+            val now = SystemClock.elapsedRealtime()
+            if (!active) { main.postDelayed(this, DeviceLinkRules.EVERY_MS); return } // listening only: nothing to send
+            if (DeviceLinkRules.quiet(now, linkedAt, statusAt)) {
+                val participant = opened
+                if (!requiet && participant != null) {
+                    // First registered again on the same device, which costs nothing; quiet again, looked for anew.
+                    android.util.Log.i(TAG, "link quiet: registering again")
+                    requiet = true
+                    drop()
+                    start(participant, notifyFailure = false, accepting = false)
+                } else {
+                    android.util.Log.i(TAG, "link quiet: looking again")
+                    requiet = false
+                    drop()
+                    opened = null
+                    followedAt = 0L
+                }
+                return
+            }
             val text = runCatching { DeviceLinkRules.encode(own()) }.getOrNull()
-            if (text != null) scope.launch { c.send(text.toByteArray()) }
+            if (text != null) scope.launch {
+                val sent = runCatching { c.send(text.toByteArray()) }.getOrElse { Result.failure(it) }
+                sent.exceptionOrNull()?.let { android.util.Log.i(TAG, "send failed: ${it.javaClass.simpleName}") }
+                    ?: run { sends++; if (sends == 1 || sends % 10 == 0) android.util.Log.i(TAG, "sent $sends") }
+            }
             main.postDelayed(this, DeviceLinkRules.EVERY_MS)
         }
     }
 
     private val receiver = object : ConnectionReceiver {
         override fun onMessageReceived(remoteConnection: RemoteConnection, payload: ByteArray) {
-            val got = DeviceLinkRules.decode(String(payload)) ?: return
+            val text = String(payload)
+            if (text == DeviceLinkRules.BYE) {
+                main.post {
+                    if (remoteConnection !== connection && remoteConnection !== back) return@post
+                    android.util.Log.i(TAG, "the other side unlinked")
+                    peerLeft = true
+                    opened = null
+                    yielded = false
+                    main.removeCallbacks(awdlWatch)
+                    drop()
+                }
+                return
+            }
+            val got = DeviceLinkRules.decode(text)
             main.post {
+                val which = when (remoteConnection) { connection -> "main"; back -> "back"; else -> "old" }
+                heard++
+                if (heard == 1 || heard % 10 == 0 || which == "old" || got == null)
+                    android.util.Log.i(TAG, "heard $heard on $which${if (got == null) " (unreadable)" else ""}")
+                if (got == null) return@post
                 if (remoteConnection !== connection && remoteConnection !== back) return@post
                 // The home screen widgets show the other side too: they hear of what changed in it.
                 if (got != status) com.meridian11.books.bentobar.widget.WidgetUpdater.changed()
+                // The other side speaks: it linked (its card, "Link again", or back from an unlink), so this side does
+                // too, and answers at once, so that both show each other with no wait.
+                val was = linked
+                unlinked = false
+                peerLeft = false
+                requiet = false
                 status = got
                 statusAt = SystemClock.elapsedRealtime()
+                if (!was) { android.util.Log.i(TAG, "the other side linked"); main.removeCallbacks(tick); tick.run() }
                 changed()
             }
         }
 
         override fun onConnectionClosed(remoteConnection: RemoteConnection, error: Throwable?, reason: String?) {
-            main.post { dropped(remoteConnection) }
+            main.post {
+                val which = when (remoteConnection) { connection -> "main"; back -> "back"; else -> "old" }
+                android.util.Log.i(TAG, "closed: $which ${error?.javaClass?.simpleName ?: ""}")
+                dropped(remoteConnection)
+            }
         }
     }
 
@@ -451,6 +520,17 @@ object Link {
         back?.let { b -> runCatching { b.closeFuture() } }
         back = null
         connection = null
+        // The other side's BentoBar ended (Android stopped it, an update) or it linked again: this side registers again
+        // on the same device at once, so that it hears the other as soon as it is back. Closes in a row wait a while.
+        val participant = opened
+        if (participant != null && !yielded && !unlinked && !peerLeft) {
+            val now = SystemClock.elapsedRealtime()
+            val wait = if (now - relistenedAt < DeviceLinkRules.RELISTEN_GAP_MS) DeviceLinkRules.RELISTEN_WAIT_MS else 0L
+            relistenedAt = now + wait
+            main.postDelayed({
+                if (!listening && !connecting && !yielded && !unlinked && !peerLeft && opened === participant) start(participant, notifyFailure = false, accepting = true)
+            }, wait)
+        }
         status = null
         changed()
     }

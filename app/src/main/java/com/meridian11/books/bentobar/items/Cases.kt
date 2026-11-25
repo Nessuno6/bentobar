@@ -32,5 +32,19 @@ object Cases {
         prefs.edit().putString(KEY, DevicesRules.encodeCases(next)).apply()
     }
 
+    /** Removes [name]'s saved case from the device, the widget and any watching apps. */
+    @Synchronized fun forget(name: String) {
+        chargingAt.remove(name)
+        val next = DevicesRules.forgetCase(all(), name)
+        cached = next
+        prefs.edit().putString(KEY, DevicesRules.encodeCases(next)).apply()
+        com.meridian11.books.bentobar.widget.WidgetStore.forget(Env.app, "case:$name")
+        com.meridian11.books.bentobar.widget.WidgetUpdater.changed()
+        Ticker.refresh()
+        if (com.meridian11.books.bentobar.data.Sharing.on.value) {
+            runCatching { Env.app.contentResolver.notifyChange(DevicesProvider.BASE, null) }
+        }
+    }
+
     private const val KEY = "cases"
 }

@@ -82,6 +82,9 @@ object DevicesRules {
     /** The cases kept, newest first: [level] for [name] now replaces what was kept of it. A few at most. */
     fun remember(cases: List<Case>, name: String, level: Int, at: Long): List<Case> =
         (listOf(Case(name, level, at)) + cases.filter { it.name != name }).take(CASES_MAX)
+
+    /** Drops [name]'s saved case from [cases]. */
+    fun forgetCase(cases: List<Case>, name: String): List<Case> = cases.filter { it.name != name }
     private const val CASES_MAX = 6
 
     /** The cases as kept on the device: a line each, level, time and name, separated by tabs. */

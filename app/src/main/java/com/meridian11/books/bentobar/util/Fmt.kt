@@ -118,6 +118,16 @@ object Fmt {
     fun percent(f: Double) = percent(kotlin.math.floor(f * 100 + 1e-4).toInt())
 
     /**
+     * Same as [percent], but single-digit values (0%–9%) are prefixed with a figure space (`\u2007`, the width of one
+     * digit) so 1-digit and 2-digit readings take the exact same width in the bar and in shared item rows.
+     */
+    fun percentTwoDigit(f: Double): String {
+        val pct = kotlin.math.floor(f * 100 + 1e-4).toInt()
+        val s = percent(pct)
+        return if (pct in 0..9) "\u2007$s" else s
+    }
+
+    /**
      * The widest text [text] can become while its numbers change, for a fixed-width slot in the
      * strip. A number, whole or with one decimal ("0", "8.4", "999"), becomes "888": the formats
      * here switch from 9.9 to 10 and stay under 1000 before the unit steps up, and with tabular
@@ -151,6 +161,8 @@ object Fmt {
         while (i < text.length) {
             val c = text[i]
             if (!c.isDigit()) {
+                // Figure-space padding before a digit is already accounted for by the digit slot.
+                if (c == '\u2007' && text.getOrNull(i + 1)?.isDigit() == true) { i++; continue }
                 // A unit right after a number ("4K", "15.9 GB"), not the start of a word ("Keep").
                 val afterNumber = text.getOrNull(i - 1)?.isDigit() == true ||
                     (text.getOrNull(i - 1) == ' ' && text.getOrNull(i - 2)?.isDigit() == true)

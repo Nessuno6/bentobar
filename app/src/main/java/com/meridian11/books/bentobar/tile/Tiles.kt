@@ -98,7 +98,7 @@ class LinkTile : TileService() {
         Env.init(this)
         val link = com.meridian11.books.bentobar.items.Link
         when {
-            link.linked || link.connecting -> link.unlink()
+            link.linked || link.connecting || link.waiting || link.paused -> link.unlink()
             else -> startActivityAndCollapse(PendingIntent.getActivity(this, 0,
                 Intent(this, com.meridian11.books.bentobar.ui.LinkActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_IMMUTABLE))
@@ -109,10 +109,11 @@ class LinkTile : TileService() {
     private fun refresh() {
         val t = qsTile ?: return
         val link = com.meridian11.books.bentobar.items.Link
-        t.state = if (link.linked || link.connecting) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        t.state = if (link.linked || link.connecting || link.waiting) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         t.subtitle = when {
             link.linked -> link.peer ?: ""
             link.connecting -> getString(R.string.link_tile_connecting)
+            link.waiting -> getString(R.string.link_tile_waiting)
             link.paused -> getString(R.string.link_tile_paused)
             else -> getString(R.string.link_tile_off)
         }

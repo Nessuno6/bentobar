@@ -69,7 +69,7 @@ object CpuItem : ItemType("cpu", R.string.item_cpu_title, Sym.MEMORY, R.string.i
         // No load to show on this device: with the switch on the item still comes out when hot, and says that instead.
         if (!c.available) return ItemState(icon = icon, text = "–", active = shown.active, tone = tone,
             desc = if (shown.hot) Env.str(R.string.heat_desc, Env.str(Heat.words(status))) else Env.str(R.string.cpu_unavailable_desc))
-        return ItemState(icon = icon, text = Fmt.percent(c.total), active = shown.active, tone = tone, widthKey = "cpu",
+        return ItemState(icon = icon, text = Fmt.percentTwoDigit(c.total), active = shown.active, tone = tone, widthKey = "cpu",
             desc = Env.str(when {
                 shown.hot -> R.string.cpu_state_desc_hot
                 shown.high -> R.string.cpu_state_desc_high

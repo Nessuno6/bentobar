@@ -19,7 +19,10 @@ class WidthTemplateTest {
 
     @Test fun percentages() {
         assertEquals("888%", t("5%"))
+        assertEquals("888%", t("\u20075%"))
         assertEquals("888%", t("100%"))
+        assertEquals("\u20077%", Fmt.percentTwoDigit(0.07))
+        assertEquals("17%", Fmt.percentTwoDigit(0.17))
     }
 
     @Test fun clocksKeepTheirShape() {

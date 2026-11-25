@@ -81,4 +81,15 @@ class DeviceLinkRulesTest {
         org.junit.Assert.assertFalse(DeviceLinkRules.relinks(busy = false, sinceBusyMs = 30_000))
         org.junit.Assert.assertTrue(DeviceLinkRules.relinks(busy = false, sinceBusyMs = DeviceLinkRules.LINGER_MS))
     }
+
+    @Test fun aLinkThatHearsNothingIsQuiet() {
+        val stale = DeviceLinkRules.STALE_MS
+        // Just linked, nothing heard yet: not quiet until a stale time has passed since the link came up.
+        org.junit.Assert.assertFalse(DeviceLinkRules.quiet(now = 1_000 + stale, linkedAt = 1_000, heardAt = 0))
+        org.junit.Assert.assertTrue(DeviceLinkRules.quiet(now = 1_001 + stale, linkedAt = 1_000, heardAt = 0))
+        // Heard lately: not quiet, however old the link.
+        org.junit.Assert.assertFalse(DeviceLinkRules.quiet(now = 10 * stale, linkedAt = 0, heardAt = 10 * stale - 30_000))
+        // Heard last on an earlier link: counts from the new one.
+        org.junit.Assert.assertFalse(DeviceLinkRules.quiet(now = 5 * stale, linkedAt = 5 * stale - 1, heardAt = 0))
+    }
 }

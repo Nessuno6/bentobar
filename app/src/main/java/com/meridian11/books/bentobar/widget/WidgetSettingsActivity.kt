@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.meridian11.books.bentobar.R
+import com.meridian11.books.bentobar.items.Cases
 import com.meridian11.books.bentobar.items.DevicesRules
 import com.meridian11.books.bentobar.items.Env
 import com.meridian11.books.bentobar.items.Link
@@ -195,7 +196,11 @@ private fun Settings(id: Int, provider: BaseWidget, onSaved: () -> Unit) {
                     WidgetStore.setPriority(ctx, keys)
                     changed()
                 },
-                onForget = { WidgetStore.forget(ctx, cell.key); changed() },
+                onForget = {
+                    WidgetStore.forget(ctx, cell.key)
+                    if (cell.key.startsWith("case:")) Cases.forget(cell.key.removePrefix("case:"))
+                    changed()
+                },
                 onShow = { WidgetStore.setHidden(ctx, cell.key, !it); changed() },
                 index = i)
         }
@@ -272,7 +277,7 @@ private fun OrderRow(
             }
             if (note != null) Text(note, style = MaterialTheme.typography.bodySmall)
         }
-        if (away && cell.key != WidgetRules.SELF) TextButton(onClick = onForget) { Text(stringResource(R.string.widget_forget)) }
+        if ((away || cell.kind == WidgetRules.Kind.CASE) && cell.key != WidgetRules.SELF) TextButton(onClick = onForget) { Text(stringResource(R.string.widget_forget)) }
         Switch(checked = shown, onCheckedChange = onShow)
     }
 }

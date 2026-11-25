@@ -491,6 +491,7 @@ class DevicesRulesTest {
             "devices_cases" to "Charging cases",
             "devices_case_of" to "%1\$s case",
             "devices_case_seen" to "%1\$s · %2\$s ago",
+            "devices_case_remove" to "Remove %1\$s case",
             "devices_share" to "Share with other apps",
             "devices_share_help" to "Lets apps you allow read your devices' batteries: their kind, name and level, and the earbuds' cases. " +
                 "Each app still asks Android for your permission first. Applies to this device, not to one item.",
@@ -653,6 +654,7 @@ class DevicesRulesTest {
         cases = DevicesRules.remember(cases, "Other Buds", 40, 2_000)
         cases = DevicesRules.remember(cases, "My Buds", 65, 3_000)
         assertEquals(listOf("My Buds" to 65, "Other Buds" to 40), cases.map { it.name to it.level })
+        assertEquals(listOf("Other Buds" to 40), DevicesRules.forgetCase(cases, "My Buds").map { it.name to it.level })
         assertEquals(cases, DevicesRules.decodeCases(DevicesRules.encodeCases(cases)))
         assertEquals(emptyList<DevicesRules.Case>(), DevicesRules.decodeCases(null))
         assertEquals(listOf("Ok"), DevicesRules.decodeCases("x\t1\tBad\n50\tnow\tBad\n50\t1\tOk").map { it.name })
